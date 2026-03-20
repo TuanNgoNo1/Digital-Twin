@@ -865,6 +865,7 @@ MonoBehaviour:
   linkedLight: {fileID: 0}
   plc: {fileID: 1653539907}
   diaChiPLC: Y0
+  isON: 0
 --- !u!65 &1220499027
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -1280,6 +1281,7 @@ MonoBehaviour:
   linkedLight: {fileID: 0}
   plc: {fileID: 0}
   diaChiPLC: Y0
+  isON: 0
 --- !u!4 &1483070563
 Transform:
   m_ObjectHideFlags: 0
@@ -1326,8 +1328,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PLCController
   portName: COM8
   baudRate: 9600
-  diaChiDen: Y0
+  diaChiDen: M1
   thoiGianNhayMs: 1
+  diaChiStart: M1
+  diaChiStop: M17
+  diaChiThuan: M4
+  diaChiNguoc: M8
+  diaChiTocDo: D146
+  tocDoMacDinh: 123
+  tocDoMin: 0
+  tocDoMax: 2000
+  buocTangGiamTocDo: 10
 --- !u!4 &1653539908
 Transform:
   m_ObjectHideFlags: 0
