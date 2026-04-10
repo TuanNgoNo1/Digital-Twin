@@ -7,7 +7,7 @@ using System.Collections.Generic;
 public class PLCController : MonoBehaviour
 {
     [Header("Cấu hình Cổng COM")]
-    public string portName = "COM8";
+    public string portName = "COM6";
     public int baudRate = 9600;
 
     [Header("Bit test riêng (KHÔNG trùng bit điều khiển PLC)")]
@@ -49,10 +49,15 @@ public class PLCController : MonoBehaviour
 
     private MelsecFxSerial melsecSerial;
     private Dictionary<string, Coroutine> pulseJobs = new Dictionary<string, Coroutine>();
+    private RotateSubmarineBlades rotateBlades;
 
     private bool trangThaiDenTest = false;
     private bool dangNhayDen = false;
     private float timerDen = 0f;
+
+    // Lưu giá trị soVong và goc hiện tại
+    private int soVongHienTai = 0;
+    private int gocHienTai = 0;
 
     void Start()
     {
@@ -71,10 +76,46 @@ public class PLCController : MonoBehaviour
         {
             Debug.Log($"<color=green>✅ Kết nối THÀNH CÔNG qua {portName}</color>");
             DatTocDo(tocDoMacDinh);
+            // Bắt đầu vòng lặp đồng bộ dữ liệu tự động
+            StartCoroutine(SyncDataWithPLCRoutine());
         }
         else
         {
             Debug.LogError($"<color=red>❌ Lỗi kết nối: {connectResult.Message}</color>");
+        }
+
+        // Find RotateSubmarineBlades in the scene
+        rotateBlades = FindObjectOfType<RotateSubmarineBlades>();
+        if (rotateBlades == null)
+        {
+            Debug.LogWarning("<color=orange>⚠️ Không tìm thấy RotateSubmarineBlades trong scene</color>");
+        }
+    }
+
+    // Vòng lặp đồng bộ dữ liệu liên tục từ PLC về Unity
+    private IEnumerator SyncDataWithPLCRoutine()
+    {
+        while (true)
+        {
+            if (KiemTraKetNoi() && rotateBlades != null)
+            {
+                // 1. Đồng bộ Tốc độ (D146)
+                var readTocDo = melsecSerial.ReadInt16(regTocDo);
+                if (readTocDo.IsSuccess)
+                {
+                    rotateBlades.rotationSpeed = readTocDo.Content;
+                }
+
+                // 2. Đồng bộ Chiều quay (Dựa trên trạng thái Bit M2/M8 hoặc logic PLC)
+                // Giả sử ta ưu tiên đọc Bit Thuận (M2) để xác định chiều
+                var readChieu = melsecSerial.ReadBool(bitThuan);
+                if (readChieu.IsSuccess)
+                {
+                    rotateBlades.SetRotationDirection(readChieu.Content);
+                }
+            }
+            // Chờ 0.1s trước khi quét lần tiếp theo (tránh nghẽn cổng Serial)
+            yield return new WaitForSeconds(0.1f);
         }
     }
 
@@ -163,17 +204,23 @@ public class PLCController : MonoBehaviour
     {
         tocDo = Mathf.Clamp(tocDo, tocDoMin, tocDoMax);
         GhiWord(regTocDo, tocDo, "Tốc độ D146");
+
+        // Đồng bộ tốc độ với model 3D
+        if (rotateBlades != null)
+            rotateBlades.rotationSpeed = tocDo;
     }
 
     public void DatSoVong(int soVong)
     {
         soVong = Mathf.Clamp(soVong, soVongMin, soVongMax);
+        soVongHienTai = soVong;
         GhiWord(regSoVong, soVong, "Số vòng D112");
     }
 
     public void DatGocQuay(int goc)
     {
         goc = Mathf.Clamp(goc, gocMin, gocMax);
+        gocHienTai = goc;
         GhiWord(regGocQuay, goc, "Góc quay D114");
     }
 
@@ -191,23 +238,53 @@ public class PLCController : MonoBehaviour
 
         int moi = Mathf.Clamp(read.Content + delta, tocDoMin, tocDoMax);
         GhiWord(regTocDo, moi, "Tốc độ D146");
+
+        // Đồng bộ tốc độ với model 3D
+        if (rotateBlades != null)
+            rotateBlades.rotationSpeed = (float)moi;
     }
 
     // =====================================================
     // NÚT CHỨC NĂNG DẠNG XUNG
     // =====================================================
-    public void StartDongCo()       => PulseBit(bitStart, pulseDuration, "START");
-    public void StopDongCo()        => PulseBit(bitStop, pulseDuration, "STOP");
-    public void ChonThuan()         => PulseBit(bitThuan, pulseDuration, "THUẬN");
-    public void ChonNguoc()         => PulseBit(bitNguoc, pulseDuration, "NGƯỢC");
-    public void ChayTheoSoVong()    => PulseBit(bitSoVong, pulseDuration, "CHẠY THEO SỐ VÒNG");
-    public void ChayTheoGoc()       => PulseBit(bitGocQuay, pulseDuration, "CHẠY THEO GÓC");
-    public void TangTocDoBangBit()  => PulseBit(bitTang, pulseDuration, "TĂNG TỐC");
-    public void GiamTocDoBangBit()  => PulseBit(bitGiam, pulseDuration, "GIẢM TỐC");
-    public void ResetCounter()      => PulseBit(bitResetCounter, pulseDuration, "RESET COUNTER");
-    public void ResetAll()          => PulseBit(bitResetAll, pulseDuration, "RESET ALL");
-    public void ErrReset()          => PulseBit(bitErrReset, pulseDuration, "ERR RESET");
-    public void QuayTheoGocMode()   => PulseBit(bitQuayTheoGoc, pulseDuration, "MODE QUAY THEO GÓC");
+    public void StartDongCo()
+    {
+        PulseBit(bitStart, pulseDuration, "START");
+        // Đồng bộ kích hoạt model 3D
+        if (rotateBlades != null)
+            rotateBlades.RotateObject(true);
+    }
+
+    public void StopDongCo()
+    {
+        PulseBit(bitStop, pulseDuration, "STOP");
+        // Đồng bộ dừng model 3D
+        if (rotateBlades != null)
+            rotateBlades.RotateObject(false);
+    }
+
+    public void ChonThuan()
+    {
+        PulseBit(bitThuan, pulseDuration, "THUẬN");
+        if (rotateBlades != null)
+            rotateBlades.SetRotationDirection(true);
+    }
+
+    public void ChonNguoc()
+    {
+        PulseBit(bitNguoc, pulseDuration, "NGƯỢC");
+        if (rotateBlades != null)
+            rotateBlades.SetRotationDirection(false);
+    }
+
+    public void ChayTheoSoVong() => PulseBit(bitSoVong, pulseDuration, "CHẠY THEO SỐ VÒNG");
+    public void ChayTheoGoc() => PulseBit(bitGocQuay, pulseDuration, "CHẠY THEO GÓC");
+    public void TangTocDoBangBit() => PulseBit(bitTang, pulseDuration, "TĂNG TỐC");
+    public void GiamTocDoBangBit() => PulseBit(bitGiam, pulseDuration, "GIẢM TỐC");
+    public void ResetCounter() => PulseBit(bitResetCounter, pulseDuration, "RESET COUNTER");
+    public void ResetAll() => PulseBit(bitResetAll, pulseDuration, "RESET ALL");
+    public void ErrReset() => PulseBit(bitErrReset, pulseDuration, "ERR RESET");
+    public void QuayTheoGocMode() => PulseBit(bitQuayTheoGoc, pulseDuration, "MODE QUAY THEO GÓC");
 
     // Tổ hợp tiện dùng
     public void KhoiDongThuanTheoSoVong(int soVong, int tocDo)
@@ -216,6 +293,8 @@ public class PLCController : MonoBehaviour
         DatTocDo(tocDo);
         ChonThuan();
         ChayTheoSoVong();
+        if (rotateBlades != null)
+            rotateBlades.SetNumberOfRotations(soVong);
         StartDongCo();
     }
 
@@ -225,6 +304,8 @@ public class PLCController : MonoBehaviour
         DatTocDo(tocDo);
         ChonNguoc();
         ChayTheoSoVong();
+        if (rotateBlades != null)
+            rotateBlades.SetNumberOfRotations(soVong);
         StartDongCo();
     }
 
@@ -234,6 +315,8 @@ public class PLCController : MonoBehaviour
         DatTocDo(tocDo);
         ChonThuan();
         ChayTheoGoc();
+        if (rotateBlades != null)
+            rotateBlades.SetNumberOfRotations(goc / 360f);
         StartDongCo();
     }
 
@@ -243,6 +326,8 @@ public class PLCController : MonoBehaviour
         DatTocDo(tocDo);
         ChonNguoc();
         ChayTheoGoc();
+        if (rotateBlades != null)
+            rotateBlades.SetNumberOfRotations(goc / 360f);
         StartDongCo();
     }
 
@@ -310,10 +395,84 @@ public class PLCController : MonoBehaviour
     {
         if (melsecSerial == null || !melsecSerial.IsOpen())
         {
-            Debug.LogWarning("<color=red>⚠️ Chưa kết nối PLC!</color>");
             return false;
         }
         return true;
+    }
+
+    // =====================================================
+    // ĐỌC THÔNG SỐ TỪ MOTOR/PLC
+    // =====================================================
+    public int DocTocDoHienTai()
+    {
+        if (!KiemTraKetNoi()) return 0;
+
+        var read = melsecSerial.ReadInt16(regTocDo);
+        if (read.IsSuccess)
+            return read.Content;
+
+        Debug.LogError($"<color=red>❌ Không đọc được tốc độ {regTocDo}: {read.Message}</color>");
+        return 0;
+    }
+
+    public int DocSoVongHienTai()
+    {
+        if (!KiemTraKetNoi()) return 0;
+
+        var read = melsecSerial.ReadInt16(regSoVong);
+        if (read.IsSuccess)
+            return read.Content;
+
+        Debug.LogError($"<color=red>❌ Không đọc được số vòng {regSoVong}: {read.Message}</color>");
+        return 0;
+    }
+
+    public int DocGocQuayHienTai()
+    {
+        if (!KiemTraKetNoi()) return 0;
+
+        var read = melsecSerial.ReadInt16(regGocQuay);
+        if (read.IsSuccess)
+            return read.Content;
+
+        Debug.LogError($"<color=red>❌ Không đọc được góc quay {regGocQuay}: {read.Message}</color>");
+        return 0;
+    }
+
+    public int DocSoXungHienTai()
+    {
+        if (!KiemTraKetNoi()) return 0;
+
+        var read = melsecSerial.ReadInt16(regSoXung);
+        if (read.IsSuccess)
+            return read.Content;
+
+        Debug.LogError($"<color=red>❌ Không đọc được số xung {regSoXung}: {read.Message}</color>");
+        return 0;
+    }
+
+    public bool DocChieuQuayHienTai()
+    {
+        if (!KiemTraKetNoi()) return true;
+
+        var read = melsecSerial.ReadBool(bitThuan);
+        if (read.IsSuccess)
+            return read.Content; // true = Thuận, false = Ngược
+
+        Debug.LogError($"<color=red>❌ Không đọc được chiều quay {bitThuan}: {read.Message}</color>");
+        return true;
+    }
+
+    public int DocTanSoXungHienTai()
+    {
+        if (!KiemTraKetNoi()) return 0;
+
+        var read = melsecSerial.ReadInt16(regTanSoXung);
+        if (read.IsSuccess)
+            return read.Content;
+
+        Debug.LogError($"<color=red>❌ Không đọc được tần số xung {regTanSoXung}: {read.Message}</color>");
+        return 0;
     }
 
     void OnApplicationQuit()
