@@ -13,10 +13,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
 <<<<<<< HEAD
+<<<<<<< HEAD
   version: 10
 =======
   version: 5
 >>>>>>> 9d093cc (Updated)
+=======
+  version: 5
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
 --- !u!21 &2100000
 Material:
   serializedVersion: 8
@@ -26,18 +30,23 @@ Material:
   m_PrefabAsset: {fileID: 0}
   m_Name: FresnelHighlight
 <<<<<<< HEAD
+<<<<<<< HEAD
   m_Shader: {fileID: -6465566751694194690, guid: e19b5bb6cb8e91e43b1b5d81a069296f, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
 =======
   m_Shader: {fileID: 4800000, guid: b24c216c4acb0094c892a61dfbbb76b4, type: 3}
 >>>>>>> 9d093cc (Updated)
+=======
+  m_Shader: {fileID: 4800000, guid: b24c216c4acb0094c892a61dfbbb76b4, type: 3}
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   m_ValidKeywords: []
   m_InvalidKeywords:
   - _RECEIVE_SHADOWS_OFF
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
+<<<<<<< HEAD
 <<<<<<< HEAD
   m_CustomRenderQueue: 2000
   stringTagMap:
@@ -47,11 +56,16 @@ Material:
   - MOTIONVECTORS
   m_LockedProperties: 
 =======
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses:
   - SHADOWCASTER
+<<<<<<< HEAD
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -123,9 +137,12 @@ Material:
     m_Floats:
     - _AlphaClip: 0
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _AlphaToMask: 0
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _BUILTIN_AlphaClip: 0
     - _BUILTIN_Blend: 0
     - _BUILTIN_CullMode: 2
@@ -148,9 +165,12 @@ Material:
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _DstBlendAlpha: 0
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _EnvironmentReflections: 1
     - _FresnelPower: 1.5
     - _GlossMapScale: 0
@@ -169,9 +189,12 @@ Material:
     - _SpecularHighlights: 1
     - _SrcBlend: 1
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _SrcBlendAlpha: 1
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _Surface: 0
     - _WorkflowMode: 1
     - _ZTest: 4
@@ -188,9 +211,12 @@ Material:
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
   m_BuildTextureStacks: []
 <<<<<<< HEAD
+<<<<<<< HEAD
   m_AllowLocking: 1
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
 --- !u!114 &743812867147283137
 MonoBehaviour:
   m_ObjectHideFlags: 11

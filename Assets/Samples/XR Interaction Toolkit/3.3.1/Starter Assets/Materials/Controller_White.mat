@@ -13,10 +13,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
 <<<<<<< HEAD
+<<<<<<< HEAD
   version: 10
 =======
   version: 5
 >>>>>>> 9d093cc (Updated)
+=======
+  version: 5
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
 --- !u!114 &-1555896807369559897
 MonoBehaviour:
   m_ObjectHideFlags: 11
@@ -39,6 +43,7 @@ Material:
   m_PrefabAsset: {fileID: 0}
   m_Name: Controller_White
 <<<<<<< HEAD
+<<<<<<< HEAD
   m_Shader: {fileID: 4800000, guid: 933532a4fcc9baf4fa0491de14d08ed7, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -46,15 +51,21 @@ Material:
   - _OCCLUSIONMAP
   m_InvalidKeywords: []
 =======
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   m_Shader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}
   m_ValidKeywords: []
   m_InvalidKeywords:
   - _OCCLUSIONMAP
+<<<<<<< HEAD
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: -1
+<<<<<<< HEAD
 <<<<<<< HEAD
   stringTagMap:
     RenderType: Opaque
@@ -65,6 +76,10 @@ Material:
   stringTagMap: {}
   disabledShaderPasses: []
 >>>>>>> 9d093cc (Updated)
+=======
+  stringTagMap: {}
+  disabledShaderPasses: []
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -132,12 +147,16 @@ Material:
     m_Floats:
     - _AO_Intensity: 1
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _AddPrecomputedVelocity: 0
     - _AlphaClip: 0
     - _AlphaToMask: 0
 =======
     - _AlphaClip: 0
 >>>>>>> 9d093cc (Updated)
+=======
+    - _AlphaClip: 0
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _BUILTIN_AlphaClip: 0
     - _BUILTIN_Blend: 0
     - _BUILTIN_CullMode: 2
@@ -151,9 +170,12 @@ Material:
     - _BUILTIN_ZWriteControl: 0
     - _Blend: 0
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _BlendModePreserveSpecular: 1
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _BumpScale: 1
     - _CastShadows: 1
     - _ClearCoatMask: 0
@@ -164,9 +186,12 @@ Material:
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _DstBlendAlpha: 0
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _EnvironmentReflections: 1
     - _GlossMapScale: 1
     - _Glossiness: 0.5
@@ -183,6 +208,7 @@ Material:
     - _SpecularHighlights: 1
     - _SrcBlend: 1
 <<<<<<< HEAD
+<<<<<<< HEAD
     - _SrcBlendAlpha: 1
     - _Surface: 0
     - _UVSec: 0
@@ -193,6 +219,11 @@ Material:
     - _UVSec: 0
     - _WorkflowMode: 1
 >>>>>>> 9d093cc (Updated)
+=======
+    - _Surface: 0
+    - _UVSec: 0
+    - _WorkflowMode: 1
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
     - _ZTest: 4
     - _ZWrite: 1
     - _ZWriteControl: 0
@@ -205,6 +236,9 @@ Material:
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
   m_BuildTextureStacks: []
 <<<<<<< HEAD
+<<<<<<< HEAD
   m_AllowLocking: 1
 =======
 >>>>>>> 9d093cc (Updated)
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2

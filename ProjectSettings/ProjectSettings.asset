@@ -114,7 +114,10 @@ PlayerSettings:
   xboxEnableGuest: 0
   xboxEnablePIXSampling: 0
   metalFramebufferOnly: 0
+<<<<<<< HEAD
   metalUseMetalDisplayLink: 0
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   xboxOneResolution: 0
   xboxOneSResolution: 0
   xboxOneXResolution: 3
@@ -177,10 +180,16 @@ PlayerSettings:
     tvOS: 0
   overrideDefaultApplicationIdentifier: 1
   AndroidBundleVersionCode: 1
+<<<<<<< HEAD
   AndroidMinSdkVersion: 25
   AndroidTargetSdkVersion: 0
   AndroidPreferredInstallLocation: 1
   AndroidPreferredDataLocation: 1
+=======
+  AndroidMinSdkVersion: 23
+  AndroidTargetSdkVersion: 0
+  AndroidPreferredInstallLocation: 1
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   aotOptions: 
   stripEngineCode: 1
   iPhoneStrippingLevel: 0
@@ -195,11 +204,19 @@ PlayerSettings:
   VertexChannelCompressionMask: 4054
   iPhoneSdkVersion: 988
   iOSSimulatorArchitecture: 0
+<<<<<<< HEAD
   iOSTargetOSVersionString: 15.0
   tvOSSdkVersion: 0
   tvOSSimulatorArchitecture: 0
   tvOSRequireExtendedGameController: 0
   tvOSTargetOSVersionString: 15.0
+=======
+  iOSTargetOSVersionString: 13.0
+  tvOSSdkVersion: 0
+  tvOSSimulatorArchitecture: 0
+  tvOSRequireExtendedGameController: 0
+  tvOSTargetOSVersionString: 13.0
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   VisionOSSdkVersion: 0
   VisionOSTargetOSVersionString: 1.0
   uIPrerenderedIcon: 0
@@ -269,7 +286,10 @@ PlayerSettings:
   useCustomGradleSettingsTemplate: 0
   useCustomProguardFile: 0
   AndroidTargetArchitectures: 2
+<<<<<<< HEAD
   AndroidAllowedArchitectures: -1
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   AndroidSplashScreenScale: 0
   androidSplashScreen: {fileID: 0}
   AndroidKeystoreName: 
@@ -572,7 +592,11 @@ PlayerSettings:
   locationUsageDescription: 
   microphoneUsageDescription: 
   bluetoothUsageDescription: 
+<<<<<<< HEAD
   macOSTargetOSVersion: 12.0
+=======
+  macOSTargetOSVersion: 11.0
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   switchNMETAOverride: 
   switchNetLibKey: 
   switchSocketMemoryPoolSize: 6144
@@ -935,9 +959,16 @@ PlayerSettings:
   hmiLoadingImage: {fileID: 0}
   platformRequiresReadableAssets: 0
   virtualTexturingSupportEnabled: 0
+<<<<<<< HEAD
   insecureHttpOption: 2
+=======
+  insecureHttpOption: 0
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
   androidVulkanDenyFilterList: []
   androidVulkanAllowFilterList: []
   androidVulkanDeviceFilterListAsset: {fileID: 0}
   d3d12DeviceFilterListAsset: {fileID: 0}
+<<<<<<< HEAD
   allowedHttpConnections: 3
+=======
+>>>>>>> 9d093cc1c17705a7090cbc391518bd764eb0acf2
