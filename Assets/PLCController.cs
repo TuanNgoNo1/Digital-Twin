@@ -7,7 +7,7 @@ using System.Collections.Generic;
 public class PLCController : MonoBehaviour
 {
     [Header("Cấu hình Cổng COM")]
-    public string portName = "COM6";
+    public string portName = "COM3";
     public int baudRate = 9600;
 
     [Header("Bit test riêng (KHÔNG trùng bit điều khiển PLC)")]
