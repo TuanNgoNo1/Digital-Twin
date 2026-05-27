@@ -150,15 +150,13 @@ public class WirePlug : MonoBehaviour
         connectedSocket = socket;
         socket.isOccupied = true;
 
-        // Snap tuyệt đối vào tâm của Socket
+        // Snap trực tiếp vào socket (pivot đã chuẩn)
         transform.position = socket.transform.position;
-        // Nếu cần xoay theo hướng của socket
         transform.rotation = socket.transform.rotation;
 
         Debug.Log($"<color=cyan>⚡ [SNAP]: {wireColor} -> {socket.socketID}</color>");
 
-        if (parentWire != null) 
-            parentWire.CheckConnection();
+        NotifyConnectedWireBodies();
         
         ClearHighlight();
     }
@@ -171,6 +169,26 @@ public class WirePlug : MonoBehaviour
             connectedSocket = null;
         }
         isSnapped = false;
-        if (parentWire != null) parentWire.CheckConnection();
+        NotifyConnectedWireBodies();
+    }
+
+    private void NotifyConnectedWireBodies()
+    {
+        bool notified = false;
+        WireBody[] bodies = FindObjectsByType<WireBody>(FindObjectsSortMode.None);
+        foreach (WireBody body in bodies)
+        {
+            if (body == null)
+                continue;
+
+            if (body.plugA == this || body.plugB == this)
+            {
+                notified = true;
+                body.CheckConnection();
+            }
+        }
+
+        if (!notified && parentWire != null)
+            parentWire.CheckConnection();
     }
 }

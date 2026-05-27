@@ -63,15 +63,16 @@ public class LockedCameraController : MonoBehaviour
         Vector3 direction = transform.forward;
         Vector3 newPos = initialPosition + panOffset - direction * (newZoom - 1f);
 
-        if (scroll > 0f) // Zoom in → kiểm tra collision
+        if (scroll > 0f) // Zoom in → kiểm tra khoảng cách an toàn tới mặt phẳng Z = -47.28
         {
-            // Raycast từ vị trí hiện tại về phía trước
-            Ray ray = new Ray(transform.position, transform.forward);
-            if (Physics.Raycast(ray, out RaycastHit hit, minDistanceToObject + 0.05f, collisionLayers))
+            // Trục Z của bảng mạch (các socket) đang ở khoảng -47.28
+            // Đảm bảo camera (Z) không đi qua mức -48.0 để không bị xuyên hình
+            float boardZ = -47.28f;
+            float safeDistanceZ = 0.5f; // Cách mặt bảng ít nhất 0.5 unit
+
+            if (newPos.z > boardZ - safeDistanceZ)
             {
-                // Có vật cản phía trước → không zoom in thêm
-                Debug.Log($"<color=orange>Camera blocked by: {hit.collider.name}</color>");
-                return;
+                return; // Ngăn không cho zoom thêm
             }
         }
 

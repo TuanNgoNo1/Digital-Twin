@@ -17,9 +17,17 @@ public class PLCDisplay3D : MonoBehaviour
 
     private TcpClient client;
     private NetworkStream stream;
+    private int connectFailCount = 0;
+    private const int maxConnectFails = 3;
 
     void Start()
     {
+        if (valueText == null)
+        {
+            Debug.LogWarning("[PLCDisplay3D] valueText chưa gán — tắt script.");
+            enabled = false;
+            return;
+        }
         StartCoroutine(ReadPLCRoutine());
     }
 
@@ -27,26 +35,54 @@ public class PLCDisplay3D : MonoBehaviour
     {
         while (true)
         {
-            // 1. Kiểm tra và tạo kết nối (Để ngoài try-catch để tránh lỗi yield)
+            if (connectFailCount >= maxConnectFails)
+            {
+                valueText.text = "OFFLINE";
+                valueText.color = Color.red;
+                yield break; // Dừng hẳn, không retry nữa
+            }
+
+            // 1. Kiểm tra và tạo kết nối
             if (client == null || !client.Connected)
             {
                 client = new TcpClient();
+                client.SendTimeout = 2000;
+                client.ReceiveTimeout = 2000;
                 IAsyncResult result = client.BeginConnect(ipAddress, port, null, null);
 
-                while (!result.IsCompleted)
+                float timeout = 3f;
+                while (!result.IsCompleted && timeout > 0)
                 {
+                    timeout -= Time.deltaTime;
                     yield return null;
                 }
 
                 try
                 {
-                    client.EndConnect(result);
-                    stream = client.GetStream();
+                    if (result.IsCompleted)
+                        client.EndConnect(result);
+                    else
+                    {
+                        client.Close();
+                        client = null;
+                    }
+                    if (client != null && client.Connected)
+                        stream = client.GetStream();
+                    else
+                        client = null;
                 }
                 catch
                 {
                     client = null;
                 }
+
+                if (client == null)
+                {
+                    connectFailCount++;
+                    yield return new WaitForSeconds(2f);
+                    continue;
+                }
+                connectFailCount = 0;
             }
 
             // 2. Đọc dữ liệu
