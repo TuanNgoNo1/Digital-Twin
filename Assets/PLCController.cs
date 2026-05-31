@@ -1,3 +1,6 @@
+// Loại khỏi build WebGL: dùng System.IO.Ports + HslCommunication (không hỗ trợ WebGL).
+// Vẫn biên dịch được trong Editor và bản Desktop. Bản WebGL dùng PLCController_v2 (HTTP).
+#if !UNITY_WEBGL || UNITY_EDITOR
 using UnityEngine;
 using UnityEngine.InputSystem;
 using HslCommunication.Profinet.Melsec;
@@ -574,3 +577,58 @@ public class PLCController : MonoBehaviour
         }
     }
 }
+#else
+// ====== WebGL stub ======
+// System.IO.Ports + HslCommunication khong ho tro tren WebGL.
+// Giu nguyen public API de cac script khac van bien dich cho WebGL.
+// Tren WebGL dieu khien PLC qua PLCController_v2 (HTTP), khong dung class nay.
+using UnityEngine;
+
+public class PLCController : MonoBehaviour
+{
+    public string portName = "COM6";
+    public int baudRate = 9600;
+    public string diaChiDenTest = "M20";
+    public float thoiGianNhayDen = 0.5f;
+    public string bitStart = "M1", bitThuan = "M2", bitQuayTheoGoc = "M3", bitSoVong = "M4";
+    public string bitGocQuay = "M5", bitNguoc = "M8", bitResetCounter = "M12", bitResetAll = "M13";
+    public string bitErrReset = "M14", bitTang = "M15", bitGiam = "M16", bitStop = "M17";
+    public string regSoXung = "D104", regSoVong = "D112", regGocQuay = "D114", regTanSoXung = "D100", regTocDo = "D128";
+    public int tocDoMacDinh = 123, tocDoMin = 0, tocDoMax = 3000;
+    public int soVongMin = 0, soVongMax = 100000, gocMin = 0, gocMax = 360000;
+    public float pulseDuration = 0.10f;
+    public bool enableAutoReadback = false, writeDefaultSpeedOnConnect = false;
+
+    public void BatDenTest() {}
+    public void TatDenTest() {}
+    public void ToggleDenTest() {}
+    public void BatNhayDenTest() {}
+    public void TatNhayDenTest() {}
+    public void DatTocDo(int tocDo) {}
+    public void DatSoVong(int soVong) {}
+    public void DatGocQuay(int goc) {}
+    public void DatTocDoDocLap(int delta) {}
+    public void StartDongCo() {}
+    public void StopDongCo() {}
+    public void ChonThuan() {}
+    public void ChonNguoc() {}
+    public void ChayTheoSoVong() {}
+    public void ChayTheoGoc() {}
+    public void TangTocDoBangBit() {}
+    public void GiamTocDoBangBit() {}
+    public void ResetCounter() {}
+    public void ResetAll() {}
+    public void ErrReset() {}
+    public void QuayTheoGocMode() {}
+    public void KhoiDongThuanTheoSoVong(int soVong, int tocDo) {}
+    public void KhoiDongNguocTheoSoVong(int soVong, int tocDo) {}
+    public void KhoiDongThuanTheoGoc(int goc, int tocDo) {}
+    public void KhoiDongNguocTheoGoc(int goc, int tocDo) {}
+    public int DocTocDoHienTai() => 0;
+    public int DocSoVongHienTai() => 0;
+    public int DocGocQuayHienTai() => 0;
+    public int DocSoXungHienTai() => 0;
+    public bool DocChieuQuayHienTai() => true;
+    public int DocTanSoXungHienTai() => 0;
+}
+#endif

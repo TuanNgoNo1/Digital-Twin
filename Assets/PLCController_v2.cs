@@ -77,7 +77,7 @@ public class PLCController_v2 : MonoBehaviour
 
     [Header("Canvas HMI")]
     public bool createCanvasHmi = true;
-    public Vector2 canvasHmiSize = new Vector2(430f, 330f);
+    public Vector2 canvasHmiSize = new Vector2(430f, 390f);
 
     [Header("Tương thích script cũ")]
     [Tooltip("URL cũ dạng http://pi:5000/control. Nếu còn được gán trong Inspector, script sẽ tự suy ra piBaseUrl.")]
@@ -195,14 +195,43 @@ public class PLCController_v2 : MonoBehaviour
         pollingJob = null;
     }
 
+    private bool lessonFinished;
+
     public void TurnOn()
     {
+        if (lessonFinished) return;
         SendControl("ON", speed: fallbackSpeedRpm);
     }
 
     public void TurnOff()
     {
+        if (lessonFinished) return;
         SendControl("OFF");
+    }
+
+    public void FinishLesson()
+    {
+        if (lessonFinished) return;
+        lessonFinished = true;
+        SendControl("OFF");
+        string dataJson = JsonUtility.ToJson(new FinishData
+        {
+            running = LatestTelemetry.running,
+            speedRpm = LatestTelemetry.speedRpm,
+            count = LatestTelemetry.count,
+            direction = LatestTelemetry.direction
+        });
+        PDTwinBridge.Submit(10f, dataJson);
+        Debug.Log("[PLCController_v2] Lesson finished, score submitted.");
+    }
+
+    [System.Serializable]
+    private class FinishData
+    {
+        public bool running;
+        public float speedRpm;
+        public int count;
+        public string direction;
     }
 
     public void SetSpeed(float rpm)
@@ -579,6 +608,9 @@ public class PLCController_v2 : MonoBehaviour
 
         onButton.onClick.AddListener(TurnOn);
         offButton.onClick.AddListener(TurnOff);
+
+        Button finishButton = CreateButton(panel.transform, "Finish_Button", "FINISH", new Vector2(16f, -330f), new Vector2(398f, 42f), new Color(0.1f, 0.3f, 0.7f, 1f));
+        finishButton.onClick.AddListener(FinishLesson);
 
         canvasHmiRoot.SetActive(runtimeHmiVisible);
         UpdateCanvasHmi();
