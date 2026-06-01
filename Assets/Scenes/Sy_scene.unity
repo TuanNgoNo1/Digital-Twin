@@ -778,7 +778,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 256.0336, y: -0.0435, z: -47.2793}
-  m_LocalScale: {x: 0.01866614, y: 0.01866614, z: 0.01866614}
+  m_LocalScale: {x: 0.027370162, y: 0.027370162, z: 0.027370162}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1702618275}
@@ -1305,13 +1305,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 240499300}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.05396898, y: -0.011982025, z: -0.00064821256, w: 0.9984706}
-  m_LocalPosition: {x: 256.0781, y: -0.012815264, z: -47.65503}
+  m_LocalRotation: {x: -0.025998197, y: -0.011995476, z: -0.00031255226, w: 0.99959004}
+  m_LocalPosition: {x: 256.083, y: -0.1, z: -47.879}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: -1.871, y: -2.469, z: 0.132}
+  m_LocalEulerAnglesHint: {x: -2.98, y: -1.375, z: 0}
 --- !u!114 &240499305
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1319,7 +1319,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 240499300}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 83fbfb18e1494f74fa6a68d1c3f64a61, type: 3}
   m_Name: 
@@ -3005,13 +3005,13 @@ MonoBehaviour:
   requiredWiresCount: 2
   requiredSocketPairs:
   - Y0-Pin11
-  - Y1-Pin9
+  - X0-oB
   demoWireNames:
   - Wire_Body_Yellow
   - Wire_04_Y1-Pin9
   hmiPanel: {fileID: 0}
   cameraStream: {fileID: 0}
-  createRuntimeOnOffHmi: 1
+  createRuntimeOnOffHmi: 0
   totalScore: 100
 --- !u!1 &432511030
 GameObject:
@@ -3593,7 +3593,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f18a1c5bc934ef7469fbc6593fa813cb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MjpegStreamer3D
-  streamUrl: http://10.38.100.214:8080/?action=stream
+  streamUrl: https://substantially-stephen-famous-biodiversity.trycloudflare.com/cam/?action=stream
   updateInterval: 0.05
 --- !u!23 &550425569
 MeshRenderer:
@@ -5909,7 +5909,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 254, y: 6}
+  m_AnchoredPosition: {x: 254, y: 0.02}
   m_SizeDelta: {x: 895.6, y: 460.2}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &973014137
@@ -6312,31 +6312,31 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.39896
+      value: 0.040173654
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.39896
+      value: 0.040173654
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.39896
+      value: 0.040173654
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 258.69
+      value: 256.215
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0
+      value: -0.184
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -44.77
+      value: -47.481
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalRotation.w
-      value: -0.3333512
+      value: -0.58057207
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalRotation.x
@@ -6344,7 +6344,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0.9428028
+      value: 0.8142089
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalRotation.z
@@ -6356,7 +6356,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 218.945
+      value: 250.982
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b06945e054a40ed498e22c0402526568, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
@@ -7068,7 +7068,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f39192f1018e3b4ea0414e8276261e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PLCController_v2
-  piBaseUrl: http://10.38.100.27:5000
+  piBaseUrl: https://substantially-stephen-famous-biodiversity.trycloudflare.com/plc
   controlEndpoint: /control
   telemetryEndpoint: /telemetry
   pollInterval: 0.5
@@ -7090,8 +7090,8 @@ MonoBehaviour:
   runtimeHmiVisible: 0
   runtimeHmiWidth: 260
   createCanvasHmi: 1
-  canvasHmiSize: {x: 430, y: 290}
-  url: http://10.38.100.27:5000/control
+  canvasHmiSize: {x: 350, y: 250}
+  url: https://substantially-stephen-famous-biodiversity.trycloudflare.com/plc/control
 --- !u!4 &1102621823
 Transform:
   m_ObjectHideFlags: 0
@@ -7324,11 +7324,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: bc0e2946d1de5864c8650afa9e7de472, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.013231575
+      value: 0.013
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: bc0e2946d1de5864c8650afa9e7de472, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -47.950974
+      value: -48.296
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: bc0e2946d1de5864c8650afa9e7de472, type: 3}
       propertyPath: m_LocalRotation.w
@@ -7369,6 +7369,10 @@ PrefabInstance:
     - target: {fileID: 919132149155446097, guid: bc0e2946d1de5864c8650afa9e7de472, type: 3}
       propertyPath: m_Name
       value: Jack 3.5mm
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: bc0e2946d1de5864c8650afa9e7de472, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -7673,7 +7677,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 256.03323, y: -0.0211, z: -47.2793}
-  m_LocalScale: {x: 0.01866614, y: 0.01866614, z: 0.01866614}
+  m_LocalScale: {x: 0.017742354, y: 0.017742354, z: 0.017742354}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1702618275}
@@ -8573,8 +8577,8 @@ Transform:
   m_GameObject: {fileID: 1387494254}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 255.9183, y: 0.1455, z: -47.2793}
-  m_LocalScale: {x: 0.01866614, y: 0.01866614, z: 0.01866614}
+  m_LocalPosition: {x: 255.91965, y: 0.1455, z: -47.28045}
+  m_LocalScale: {x: 0.026778664, y: 0.026778664, z: 0.026778664}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1702618275}
@@ -12963,7 +12967,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1769910459}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -235.7}
   m_LocalScale: {x: 8.834182, y: 4.4789, z: 4.4789}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -14593,8 +14597,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WireBody
   plugA: {fileID: 1243045207}
   plugB: {fileID: 2011620645}
-  correctSocketA: Y1
-  correctSocketB: Pin9
+  correctSocketA: X0
+  correctSocketB: oB
   wireColor: 1
   wireWidth: 0.005
   sagAmount: 0.05
@@ -15078,7 +15082,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.0406, y: -0.2345, z: 0.0025}
-  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1619760008}
@@ -15094,7 +15098,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.1758, y: -0.2345, z: 0.0025}
-  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1710877170}
@@ -15138,7 +15142,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.0073, y: -0.3951, z: 0}
-  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1760738482}
@@ -15154,7 +15158,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.12790813, y: -0.3951, z: 0}
-  m_LocalScale: {x: 1.5, y: 1.5, z: 1.5}
+  m_LocalScale: {x: 2.5, y: 2.5, z: 2.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1306573779}
@@ -15523,7 +15527,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!33 &2158919040475029190
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -15852,7 +15856,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &4030927379249973303
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -16526,7 +16530,7 @@ Transform:
   m_GameObject: {fileID: 8145369269420282531}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0.17417492, y: -0.19604604, z: 0.038002167}
+  m_LocalPosition: {x: 1.064, y: -0.19604604, z: 0.038002167}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -16564,7 +16568,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!1 &8289754172533901440
 GameObject:
   m_ObjectHideFlags: 0

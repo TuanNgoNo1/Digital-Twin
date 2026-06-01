@@ -77,7 +77,7 @@ public class PLCController_v2 : MonoBehaviour
 
     [Header("Canvas HMI")]
     public bool createCanvasHmi = true;
-    public Vector2 canvasHmiSize = new Vector2(430f, 390f);
+    public Vector2 canvasHmiSize = new Vector2(300f, 250f);
 
     [Header("Tương thích script cũ")]
     [Tooltip("URL cũ dạng http://pi:5000/control. Nếu còn được gán trong Inspector, script sẽ tự suy ra piBaseUrl.")]
@@ -92,10 +92,14 @@ public class PLCController_v2 : MonoBehaviour
     private Coroutine pollingJob;
     private string lastStatus = "";
     private GameObject canvasHmiRoot;
-    private TextMeshProUGUI canvasStatusText;
-    private TextMeshProUGUI canvasMotorText;
-    private TextMeshProUGUI canvasPiText;
-    private TextMeshProUGUI canvasTelemetryText;
+    private TextMeshProUGUI hmiAngleText;
+    private TextMeshProUGUI hmiRotText;
+    private TextMeshProUGUI hmiSpeedText;
+    private TextMeshProUGUI hmiSpeedSetText;
+    private TextMeshProUGUI hmiStatusText;
+    private TMP_InputField hmiRotInput;
+    private TMP_InputField hmiAngleInput;
+    private float hmiTargetSpeed = 100f;
     private bool initialized;
     private float visualDegreesPerSecond;
     private bool visualDirectionForward = true;
@@ -195,43 +199,14 @@ public class PLCController_v2 : MonoBehaviour
         pollingJob = null;
     }
 
-    private bool lessonFinished;
-
     public void TurnOn()
     {
-        if (lessonFinished) return;
         SendControl("ON", speed: fallbackSpeedRpm);
     }
 
     public void TurnOff()
     {
-        if (lessonFinished) return;
         SendControl("OFF");
-    }
-
-    public void FinishLesson()
-    {
-        if (lessonFinished) return;
-        lessonFinished = true;
-        SendControl("OFF");
-        string dataJson = JsonUtility.ToJson(new FinishData
-        {
-            running = LatestTelemetry.running,
-            speedRpm = LatestTelemetry.speedRpm,
-            count = LatestTelemetry.count,
-            direction = LatestTelemetry.direction
-        });
-        PDTwinBridge.Submit(10f, dataJson);
-        Debug.Log("[PLCController_v2] Lesson finished, score submitted.");
-    }
-
-    [System.Serializable]
-    private class FinishData
-    {
-        public bool running;
-        public float speedRpm;
-        public int count;
-        public string direction;
     }
 
     public void SetSpeed(float rpm)
@@ -585,6 +560,11 @@ public class PLCController_v2 : MonoBehaviour
 
         canvasHmiRoot.AddComponent<GraphicRaycaster>();
 
+        Color green = new Color(0.18f, 0.55f, 0.20f, 1f);
+        Color red = new Color(0.72f, 0.12f, 0.12f, 1f);
+        Color blueBtn = new Color(0.16f, 0.34f, 0.72f, 1f);
+        Color redBtn = new Color(0.82f, 0.14f, 0.14f, 1f);
+
         GameObject panel = new GameObject("HMI_Panel");
         panel.transform.SetParent(canvasHmiRoot.transform, false);
         RectTransform panelRect = panel.AddComponent<RectTransform>();
@@ -592,28 +572,94 @@ public class PLCController_v2 : MonoBehaviour
         panelRect.anchorMax = new Vector2(0f, 1f);
         panelRect.pivot = new Vector2(0f, 1f);
         panelRect.anchoredPosition = new Vector2(16f, -16f);
-        panelRect.sizeDelta = canvasHmiSize;
+        panelRect.sizeDelta = new Vector2(600f, 300f);
+        panel.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.25f);
 
-        Image panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0.92f, 0.94f, 0.96f, 0.97f);
+        Transform gp = MakeSubPanel(panel.transform, "Green", new Vector2(0f, 0f), new Vector2(410f, 300f), green);
+        Transform rp = MakeSubPanel(panel.transform, "Red", new Vector2(410f, 0f), new Vector2(190f, 300f), red);
 
-        CreateText(panel.transform, "Title", "HMI - PLC MOTOR", new Vector2(16f, -12f), new Vector2(328f, 26f), 18, true);
-        canvasPiText = CreateText(panel.transform, "PiStatus", "PI: UNKNOWN", new Vector2(16f, -42f), new Vector2(328f, 24f), 13, false);
-        canvasMotorText = CreateText(panel.transform, "MotorStatus", "Motor: STOPPED", new Vector2(16f, -68f), new Vector2(328f, 24f), 14, false);
-        canvasStatusText = CreateText(panel.transform, "LastStatus", "Gateway ready", new Vector2(16f, -94f), new Vector2(398f, 34f), 12, false);
-        canvasTelemetryText = CreateText(panel.transform, "Telemetry", "Telemetry: waiting", new Vector2(16f, -130f), new Vector2(398f, 120f), 12, false);
+        // ----- Panel trai (xanh) -----
+        CreateText(gp, "L1", "Đặt vị trí", new Vector2(8f, -12f), new Vector2(104f, 26f), 15, true);
+        CreateText(gp, "U1", "Vòng", new Vector2(116f, -12f), new Vector2(48f, 26f), 14, false);
+        hmiRotInput = CreateInputField(gp, "RotInput", "0", new Vector2(166f, -14f), new Vector2(72f, 30f), 15);
+        CreateButton(gp, "SetRot", "SET", new Vector2(246f, -14f), new Vector2(64f, 32f), blueBtn).onClick.AddListener(() =>
+        { if (float.TryParse(hmiRotInput.text, out float v)) SetTargetRotations(v); });
 
-        Button onButton = CreateButton(panel.transform, "ON_Button", "ON", new Vector2(16f, -278f), new Vector2(185f, 42f), new Color(0.08f, 0.58f, 0.22f, 1f));
-        Button offButton = CreateButton(panel.transform, "OFF_Button", "OFF", new Vector2(229f, -278f), new Vector2(185f, 42f), new Color(0.76f, 0.1f, 0.1f, 1f));
+        CreateText(gp, "L2", "Đặt vị trí", new Vector2(8f, -52f), new Vector2(104f, 26f), 15, true);
+        CreateText(gp, "U2", "Độ", new Vector2(116f, -52f), new Vector2(48f, 26f), 14, false);
+        hmiAngleInput = CreateInputField(gp, "AngleInput", "0", new Vector2(166f, -54f), new Vector2(72f, 30f), 15);
+        CreateButton(gp, "SetAngle", "SET", new Vector2(246f, -54f), new Vector2(64f, 32f), blueBtn).onClick.AddListener(() =>
+        { if (float.TryParse(hmiAngleInput.text, out float v)) SetTargetAngle(v); });
 
-        onButton.onClick.AddListener(TurnOn);
-        offButton.onClick.AddListener(TurnOff);
+        CreateText(gp, "L3", "Đặt tốc độ:", new Vector2(8f, -92f), new Vector2(104f, 26f), 15, true);
+        CreateText(gp, "U3", "Vòng/phút", new Vector2(116f, -92f), new Vector2(80f, 26f), 13, false);
+        hmiSpeedSetText = CreateText(gp, "SpeedSet", "100", new Vector2(300f, -92f), new Vector2(60f, 26f), 16, true);
+        CreateButton(gp, "Plus", "+", new Vector2(166f, -124f), new Vector2(56f, 30f), blueBtn).onClick.AddListener(() =>
+        { hmiTargetSpeed = Mathf.Clamp(hmiTargetSpeed + 10f, 0f, 3000f); SetSpeed(hmiTargetSpeed); if (hmiSpeedSetText != null) hmiSpeedSetText.text = hmiTargetSpeed.ToString("F0"); });
+        CreateButton(gp, "Minus", "-", new Vector2(228f, -124f), new Vector2(56f, 30f), redBtn).onClick.AddListener(() =>
+        { hmiTargetSpeed = Mathf.Clamp(hmiTargetSpeed - 10f, 0f, 3000f); SetSpeed(hmiTargetSpeed); if (hmiSpeedSetText != null) hmiSpeedSetText.text = hmiTargetSpeed.ToString("F0"); });
 
-        Button finishButton = CreateButton(panel.transform, "Finish_Button", "FINISH", new Vector2(16f, -330f), new Vector2(398f, 42f), new Color(0.1f, 0.3f, 0.7f, 1f));
-        finishButton.onClick.AddListener(FinishLesson);
+        hmiAngleText = CreateText(gp, "St1", "Vị trí (độ): 0", new Vector2(8f, -172f), new Vector2(230f, 24f), 15, false);
+        hmiRotText = CreateText(gp, "St2", "Đã quay: 0.00", new Vector2(8f, -198f), new Vector2(230f, 24f), 15, false);
+        hmiSpeedText = CreateText(gp, "St3", "Tốc độ RPM: 0", new Vector2(8f, -224f), new Vector2(230f, 24f), 15, false);
+        CreateButton(gp, "RstStatus", "RST", new Vector2(250f, -200f), new Vector2(70f, 44f), redBtn).onClick.AddListener(() => SendControl("RESET_COUNTER"));
+        hmiStatusText = CreateText(gp, "PiStatus", "PI: ...", new Vector2(8f, -262f), new Vector2(394f, 22f), 12, false);
+
+        // ----- Panel phai (do) -----
+        CreateButton(rp, "Fwd", "Thuận", new Vector2(12f, -12f), new Vector2(166f, 44f), blueBtn).onClick.AddListener(SetDirectionForward);
+        CreateButton(rp, "Rev", "Ngược", new Vector2(12f, -62f), new Vector2(166f, 44f), blueBtn).onClick.AddListener(SetDirectionReverse);
+        CreateButton(rp, "Start", "START", new Vector2(12f, -116f), new Vector2(166f, 42f), blueBtn).onClick.AddListener(TurnOn);
+        CreateButton(rp, "Stop", "STOP", new Vector2(12f, -162f), new Vector2(166f, 42f), redBtn).onClick.AddListener(TurnOff);
+        CreateButton(rp, "RstRight", "RST", new Vector2(12f, -208f), new Vector2(166f, 40f), redBtn).onClick.AddListener(() => SendControl("ERR_RESET"));
 
         canvasHmiRoot.SetActive(runtimeHmiVisible);
         UpdateCanvasHmi();
+    }
+
+    private Transform MakeSubPanel(Transform parent, string name, Vector2 pos, Vector2 size, Color color)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        RectTransform rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = size;
+        go.AddComponent<Image>().color = color;
+        return go.transform;
+    }
+
+    private TMP_InputField CreateInputField(Transform parent, string name, string initial, Vector2 pos, Vector2 size, int fontSize)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        RectTransform rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = pos;
+        rect.sizeDelta = size;
+        go.AddComponent<Image>().color = Color.white;
+
+        GameObject textGo = new GameObject("Text");
+        textGo.transform.SetParent(go.transform, false);
+        RectTransform tr = textGo.AddComponent<RectTransform>();
+        tr.anchorMin = Vector2.zero;
+        tr.anchorMax = Vector2.one;
+        tr.offsetMin = new Vector2(6f, 2f);
+        tr.offsetMax = new Vector2(-6f, -2f);
+        TextMeshProUGUI t = textGo.AddComponent<TextMeshProUGUI>();
+        t.fontSize = fontSize;
+        t.color = Color.black;
+        t.alignment = TextAlignmentOptions.MidlineLeft;
+
+        TMP_InputField input = go.AddComponent<TMP_InputField>();
+        input.textViewport = rect;
+        input.textComponent = t;
+        input.contentType = TMP_InputField.ContentType.DecimalNumber;
+        input.text = initial;
+        return input;
     }
 
     private TextMeshProUGUI CreateText(Transform parent, string name, string value, Vector2 anchoredPosition, Vector2 size, int fontSize, bool bold)
@@ -678,24 +724,11 @@ public class PLCController_v2 : MonoBehaviour
         if (canvasHmiRoot == null)
             return;
 
-        if (canvasPiText != null)
-            canvasPiText.text = $"PI: {(IsPiOnline ? "ONLINE" : "OFFLINE / WAITING")}  ({piBaseUrl})";
-
-        if (canvasMotorText != null)
-            canvasMotorText.text = LatestTelemetry.running ? "Motor: RUNNING" : "Motor: STOPPED";
-
-        if (canvasStatusText != null)
-            canvasStatusText.text = string.IsNullOrWhiteSpace(lastStatus) ? $"Gateway: {piBaseUrl}" : lastStatus;
-
-        if (canvasTelemetryText != null)
-        {
-            canvasTelemetryText.text =
-                $"Speed: {LatestTelemetry.speedRpm:F0} RPM   Count: {LatestTelemetry.count}\n" +
-                $"Rotations: {LatestTelemetry.rotations:F2}   Angle: {LatestTelemetry.angle:F1} deg\n" +
-                $"Direction: {LatestTelemetry.direction}   Action: {LatestTelemetry.action}\n" +
-                $"Backend: {(LatestTelemetry.backendSynced ? "SYNCED" : LatestTelemetry.backendStatus)}\n" +
-                visualSyncStatus;
-        }
+        if (hmiAngleText != null) hmiAngleText.text = $"Vị trí (độ): {LatestTelemetry.angle:F0}";
+        if (hmiRotText != null) hmiRotText.text = $"Đã quay: {LatestTelemetry.rotations:F2}";
+        if (hmiSpeedText != null) hmiSpeedText.text = $"Tốc độ RPM: {LatestTelemetry.speedRpm:F0}";
+        if (hmiStatusText != null)
+            hmiStatusText.text = (IsPiOnline ? "PI ONLINE" : "PI OFFLINE/WAIT") + (LatestTelemetry.running ? " | RUN" : " | STOP");
     }
 
     private void OnGUI()
