@@ -59,16 +59,13 @@ public class PLCController_v2 : MonoBehaviour
 
     [Header("Fallback khi Pi offline")]
     public bool optimisticLocalTelemetry = false;
-    public float fallbackSpeedRpm = 10000f;
+    public float fallbackSpeedRpm = 100f;
 
     [Header("Motor ảo")]
     public RotateSubmarineBlades rotateBlades;
     public VirtualMotorController virtualMotor;
     public Transform visualMotorRotor;
     public bool syncMotorModel = true;
-    public float visualMotorSpeedScale = 0.6f;
-    public float visualMotorMinDegreesPerSecond = 120f;
-    public float visualMotorMaxDegreesPerSecond = 1440f;
 
     [Header("HMI demo fallback")]
     public bool showRuntimeHmi = false;
@@ -78,6 +75,14 @@ public class PLCController_v2 : MonoBehaviour
     [Header("Canvas HMI")]
     public bool createCanvasHmi = true;
     public Vector2 canvasHmiSize = new Vector2(300f, 250f);
+    [Tooltip("Vi tri goc tren-trai cua bang HMI (pixel, tinh tu goc tren-trai man hinh).")]
+    public Vector2 canvasHmiAnchoredPosition = new Vector2(16f, -16f);
+    [Tooltip("Ty le thu nho bang HMI de khong che vung noi day.")]
+    public float canvasHmiScale = 0.5f;
+    [Header("Nhan day (chu mau)")]
+    public bool showWireLabels = true;
+    [Tooltip("Tam cua 2 dong nhan, tinh tu goc tren-trai man hinh (pixel).")]
+    public Vector2 wireLabelsCenter = new Vector2(917f, -120f);
 
     [Header("Tương thích script cũ")]
     [Tooltip("URL cũ dạng http://pi:5000/control. Nếu còn được gán trong Inspector, script sẽ tự suy ra piBaseUrl.")]
@@ -151,7 +156,7 @@ public class PLCController_v2 : MonoBehaviour
         LatestTelemetry.runId = runId;
         LatestTelemetry.lessonId = lessonId;
         LatestTelemetry.userId = userId;
-        LatestTelemetry.speedRpm = fallbackSpeedRpm;
+        LatestTelemetry.speedRpm = hmiTargetSpeed;
         LatestTelemetry.direction = "forward";
 
         if (createCanvasHmi)
@@ -201,7 +206,8 @@ public class PLCController_v2 : MonoBehaviour
 
     public void TurnOn()
     {
-        SendControl("ON", speed: fallbackSpeedRpm);
+        float speed = LatestTelemetry.speedRpm > 0f ? LatestTelemetry.speedRpm : hmiTargetSpeed;
+        SendControl("ON", speed: speed);
     }
 
     public void TurnOff()
@@ -429,10 +435,9 @@ public class PLCController_v2 : MonoBehaviour
         }
 
         float rpm = Mathf.Max(0f, LatestTelemetry.speedRpm);
-        visualDegreesPerSecond = LatestTelemetry.running
-            ? Mathf.Clamp(rpm * visualMotorSpeedScale, visualMotorMinDegreesPerSecond, visualMotorMaxDegreesPerSecond)
-            : 0f;
-        float visualRpm = visualDegreesPerSecond / 6f;
+        // Dong bo 1:1 voi motor that: RPM -> deg/s = RPM * 6 (khong scale, khong clamp)
+        visualDegreesPerSecond = LatestTelemetry.running ? rpm * 6f : 0f;
+        float visualRpm = rpm;
         bool isForward = !LatestTelemetry.direction.Equals("reverse", StringComparison.OrdinalIgnoreCase);
         visualDirectionForward = isForward;
 
@@ -571,8 +576,9 @@ public class PLCController_v2 : MonoBehaviour
         panelRect.anchorMin = new Vector2(0f, 1f);
         panelRect.anchorMax = new Vector2(0f, 1f);
         panelRect.pivot = new Vector2(0f, 1f);
-        panelRect.anchoredPosition = new Vector2(16f, -16f);
+        panelRect.anchoredPosition = canvasHmiAnchoredPosition;
         panelRect.sizeDelta = new Vector2(600f, 300f);
+        panel.transform.localScale = Vector3.one * canvasHmiScale;
         panel.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.25f);
 
         Transform gp = MakeSubPanel(panel.transform, "Green", new Vector2(0f, 0f), new Vector2(410f, 300f), green);
@@ -612,8 +618,23 @@ public class PLCController_v2 : MonoBehaviour
         CreateButton(rp, "Stop", "STOP", new Vector2(12f, -162f), new Vector2(166f, 42f), redBtn).onClick.AddListener(TurnOff);
         CreateButton(rp, "RstRight", "RST", new Vector2(12f, -208f), new Vector2(166f, 40f), redBtn).onClick.AddListener(() => SendControl("ERR_RESET"));
 
+        if (showWireLabels)
+        {
+            CreateWireLabel(canvasHmiRoot.transform, "WireLabelYellow", "Dây Vàng: Y0-Pin11", new Color(1f, 0.78f, 0f), wireLabelsCenter);
+            CreateWireLabel(canvasHmiRoot.transform, "WireLabelRed", "Dây Đỏ: X0-0B", new Color(0.86f, 0.12f, 0.12f), wireLabelsCenter + new Vector2(0f, -34f));
+        }
+
         canvasHmiRoot.SetActive(runtimeHmiVisible);
         UpdateCanvasHmi();
+    }
+
+    private void CreateWireLabel(Transform parent, string name, string content, Color color, Vector2 anchoredPosition)
+    {
+        TextMeshProUGUI t = CreateText(parent, name, content, anchoredPosition, new Vector2(260f, 26f), 18, true);
+        t.rectTransform.pivot = new Vector2(0.5f, 1f);
+        t.rectTransform.anchoredPosition = anchoredPosition;
+        t.alignment = TextAlignmentOptions.Center;
+        t.color = color;
     }
 
     private Transform MakeSubPanel(Transform parent, string name, Vector2 pos, Vector2 size, Color color)
