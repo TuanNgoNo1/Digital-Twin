@@ -1,37 +1,32 @@
-<!--
-═══════════════════════════════════════════════════════════════════════════
-  HƯỚNG DẪN SỬ DỤNG FILE NÀY (đọc 30 giây là dùng được)
-═══════════════════════════════════════════════════════════════════════════
+# 📖 CÁCH DÙNG TÀI LIỆU NÀY (đọc 30 giây là dùng được)
 
-  ĐÂY LÀ FILE BÀN GIAO 1 PHIÊN LÀM VIỆC VỚI AI.
-  Quy ước: mỗi phiên = 1 file  chats/<ngày>-<chủ đề chính>.md
-  File mới nhất (theo ngày) = trạng thái hiện tại của dự án.
-  Nhìn TÊN FILE là biết phiên đó làm về cái gì.
+> Đây là **file bàn giao 1 phiên làm việc với AI**. Quy ước: mỗi phiên = 1 file `chats/<ngày>-<chủ đề chính>.md`.
+> File mới nhất (theo ngày) = trạng thái hiện tại của dự án. **Nhìn tên file là biết phiên đó làm gì.**
 
-  ┌─ NGƯỜI NHẬN VIỆC (đầu phiên) ──────────────────────────────────────────┐
-  │ 1) Lấy bản mới nhất:   git checkout master && git pull                 │
-  │ 2) Mở Kiro:  kiro-cli chat   (đứng trong thư mục dự án)                 │
-  │ 3) Câu ĐẦU TIÊN gõ cho AI:                                             │
-  │      "Đọc file chats/<file mới nhất>.md rồi tiếp tục từ mục            │
-  │       '➡️ CẦN LÀM TIẾP'."                                              │
-  │    → AI hiểu ngay đã/đang/cần làm gì, không phải hỏi lại người cũ.     │
-  └────────────────────────────────────────────────────────────────────────┘
+**🟢 NGƯỜI NHẬN VIỆC (đầu phiên):**
+1. Lấy bản mới nhất:
+   ```bash
+   git checkout master && git pull
+   ```
+2. Mở Kiro trong thư mục dự án: `kiro-cli chat`
+3. Câu **ĐẦU TIÊN** gõ cho AI:
+   > *"Đọc file `chats/<file mới nhất>.md` rồi tiếp tục từ mục '➡️ CẦN LÀM TIẾP'."*
 
-  ┌─ NGƯỜI BÀN GIAO (cuối phiên) ──────────────────────────────────────────┐
-  │ 1) Bảo AI: "Viết tổng kết phiên này vào                                │
-  │      chats/<ngày>-<chủ đề>.md theo đúng 4 mục như file mẫu."           │
-  │ 2) Đẩy lên GitHub (branch master):                                     │
-  │      git add chats/                                                     │
-  │      git commit -m "chat <ngày>: <tóm tắt ngắn>"                        │
-  │      git push origin master                                            │
-  └────────────────────────────────────────────────────────────────────────┘
+   → AI hiểu ngay đã/đang/cần làm gì, **không phải hỏi lại người cũ**.
 
-  GIỮ 4 MỤC: ✅ Đã làm / 🔧 Đang dở / ➡️ Cần làm tiếp / ⚠️ Lưu ý.
-  Phần "CHI TIẾT KỸ THUẬT" cuối file = tra cứu sâu khi cần.
-  (Tùy chọn) muốn AI đọc nguyên văn hội thoại cũ: /chat save
-  chats/<ngày>-session.json , phiên sau /chat load file đó.
-═══════════════════════════════════════════════════════════════════════════
--->
+**🔵 NGƯỜI BÀN GIAO (cuối phiên):**
+1. Bảo AI: *"Viết tổng kết phiên này vào `chats/<ngày>-<chủ đề>.md` theo đúng 4 mục như file mẫu."*
+2. Đẩy lên GitHub (branch master):
+   ```bash
+   git add chats/
+   git commit -m "chat <ngày>: <tóm tắt ngắn>"
+   git push origin master
+   ```
+
+**Quy ước nội dung:** giữ 4 mục — ✅ Đã làm / 🔧 Đang dở / ➡️ Cần làm tiếp / ⚠️ Lưu ý. Phần "CHI TIẾT KỸ THUẬT" cuối file = tra cứu sâu khi cần.
+**(Tùy chọn)** muốn AI đọc nguyên văn hội thoại cũ: `/chat save chats/<ngày>-session.json`, phiên sau `/chat load <file đó>`.
+
+---
 
 # Phiên 2026-06-08 — Ngrok tunnel + điều khiển motor (thật & ảo) — Tuấn
 
