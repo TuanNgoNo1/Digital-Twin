@@ -206,6 +206,9 @@ public class PLCController_v2 : MonoBehaviour
 
     public void TurnOn()
     {
+        // Motor chay theo so xung (so vong/goc). Neu chua dat gi, mac dinh 5 vong de co cai ma quay.
+        if (LatestTelemetry.rotations <= 0f && LatestTelemetry.angle <= 0f)
+            LatestTelemetry.rotations = 5f;
         float speed = LatestTelemetry.speedRpm > 0f ? LatestTelemetry.speedRpm : hmiTargetSpeed;
         SendControl("ON", speed: speed);
     }
@@ -219,6 +222,18 @@ public class PLCController_v2 : MonoBehaviour
     {
         LatestTelemetry.speedRpm = Mathf.Max(0f, rpm);
         SendControl("SET_SPEED", speed: LatestTelemetry.speedRpm);
+    }
+
+    // Tang/giam toc bang xung M15/M16 (giong nut +/- tren HMI cung).
+    // pulses = so lan xung gui xuong moi lan bam.
+    public void SpeedUp(int pulses = 1)
+    {
+        SendControl("SPEED_UP", speed: Mathf.Max(1, pulses));
+    }
+
+    public void SpeedDown(int pulses = 1)
+    {
+        SendControl("SPEED_DOWN", speed: Mathf.Max(1, pulses));
     }
 
     public void SetTargetRotations(float rotations)
@@ -297,6 +312,7 @@ public class PLCController_v2 : MonoBehaviour
             request.uploadHandler = new UploadHandlerRaw(bodyRaw);
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("ngrok-skip-browser-warning", "true");
             request.timeout = timeoutSeconds;
 
             UnityWebRequestAsyncOperation operation;
@@ -333,6 +349,7 @@ public class PLCController_v2 : MonoBehaviour
             using (UnityWebRequest request = UnityWebRequest.Get(BuildUrl(telemetryEndpoint)))
             {
                 request.timeout = timeoutSeconds;
+                request.SetRequestHeader("ngrok-skip-browser-warning", "true");
                 UnityWebRequestAsyncOperation operation = null;
                 bool requestStarted = false;
                 try
@@ -434,10 +451,12 @@ public class PLCController_v2 : MonoBehaviour
             return;
         }
 
-        float rpm = Mathf.Max(0f, LatestTelemetry.speedRpm);
-        // Dong bo 1:1 voi motor that: RPM -> deg/s = RPM * 6 (khong scale, khong clamp)
-        visualDegreesPerSecond = LatestTelemetry.running ? rpm * 6f : 0f;
-        float visualRpm = rpm;
+        // speedRpm tu telemetry that ra la gia tri tan so xung PLC (D128/D100, ~0-3000),
+        // KHONG phai RPM. Motor: 5000 xung = 1 vong.
+        float pulseFreq = Mathf.Max(0f, LatestTelemetry.speedRpm);
+        float realRpm = pulseFreq / 5000f * 60f;          // vong/phut that
+        visualDegreesPerSecond = LatestTelemetry.running ? realRpm * 6f : 0f; // 1 rpm = 6 deg/s
+        float visualRpm = realRpm;
         bool isForward = !LatestTelemetry.direction.Equals("reverse", StringComparison.OrdinalIgnoreCase);
         visualDirectionForward = isForward;
 
@@ -600,10 +619,8 @@ public class PLCController_v2 : MonoBehaviour
         CreateText(gp, "L3", "Đặt tốc độ:", new Vector2(8f, -92f), new Vector2(104f, 26f), 15, true);
         CreateText(gp, "U3", "Vòng/phút", new Vector2(116f, -92f), new Vector2(80f, 26f), 13, false);
         hmiSpeedSetText = CreateText(gp, "SpeedSet", "100", new Vector2(300f, -92f), new Vector2(60f, 26f), 16, true);
-        CreateButton(gp, "Plus", "+", new Vector2(166f, -124f), new Vector2(56f, 30f), blueBtn).onClick.AddListener(() =>
-        { hmiTargetSpeed = Mathf.Clamp(hmiTargetSpeed + 10f, 0f, 3000f); SetSpeed(hmiTargetSpeed); if (hmiSpeedSetText != null) hmiSpeedSetText.text = hmiTargetSpeed.ToString("F0"); });
-        CreateButton(gp, "Minus", "-", new Vector2(228f, -124f), new Vector2(56f, 30f), redBtn).onClick.AddListener(() =>
-        { hmiTargetSpeed = Mathf.Clamp(hmiTargetSpeed - 10f, 0f, 3000f); SetSpeed(hmiTargetSpeed); if (hmiSpeedSetText != null) hmiSpeedSetText.text = hmiTargetSpeed.ToString("F0"); });
+        CreateButton(gp, "Plus", "+", new Vector2(166f, -124f), new Vector2(56f, 30f), blueBtn).onClick.AddListener(() => SpeedUp(1));
+        CreateButton(gp, "Minus", "-", new Vector2(228f, -124f), new Vector2(56f, 30f), redBtn).onClick.AddListener(() => SpeedDown(1));
 
         hmiAngleText = CreateText(gp, "St1", "Vị trí (độ): 0", new Vector2(8f, -172f), new Vector2(230f, 24f), 15, false);
         hmiRotText = CreateText(gp, "St2", "Đã quay: 0.00", new Vector2(8f, -198f), new Vector2(230f, 24f), 15, false);
@@ -747,7 +764,8 @@ public class PLCController_v2 : MonoBehaviour
 
         if (hmiAngleText != null) hmiAngleText.text = $"Vị trí (độ): {LatestTelemetry.angle:F0}";
         if (hmiRotText != null) hmiRotText.text = $"Đã quay: {LatestTelemetry.rotations:F2}";
-        if (hmiSpeedText != null) hmiSpeedText.text = $"Tốc độ RPM: {LatestTelemetry.speedRpm:F0}";
+        if (hmiSpeedSetText != null) hmiSpeedSetText.text = LatestTelemetry.speedRpm.ToString("F0");
+        if (hmiSpeedText != null) hmiSpeedText.text = $"Tốc độ: {LatestTelemetry.speedRpm:F0} ({LatestTelemetry.speedRpm / 5000f * 60f:F1} v/p)";
         if (hmiStatusText != null)
             hmiStatusText.text = (IsPiOnline ? "PI ONLINE" : "PI OFFLINE/WAIT") + (LatestTelemetry.running ? " | RUN" : " | STOP");
     }

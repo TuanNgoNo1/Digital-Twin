@@ -699,11 +699,11 @@ PlayerSettings:
   captureStartupLogs: {}
   activeInputHandler: 2
   windowsGamepadBackendHint: 0
-  cloudProjectId: 735e0565-96a6-4625-93f7-65689a7d1f07
+  cloudProjectId: 81bb46bf-a6c8-4f16-beb3-e452582f028e
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
   projectName: Digital-Twin-main
-  organizationId: unity_0207abc1234
+  organizationId: tuanngocf
   cloudEnabled: 0
   legacyClampBlendShapeWeights: 0
   hmiLoadingImage: {fileID: 0}

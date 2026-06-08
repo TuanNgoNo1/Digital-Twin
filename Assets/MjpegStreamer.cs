@@ -24,6 +24,7 @@ public class MjpegStreamer : MonoBehaviour
         {
             using (UnityWebRequest uwr = UnityWebRequestTexture.GetTexture(snapshotUrl))
             {
+                uwr.SetRequestHeader("ngrok-skip-browser-warning", "true");
                 // Gửi yêu cầu lấy ảnh
                 yield return uwr.SendWebRequest();
 

@@ -3967,7 +3967,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f18a1c5bc934ef7469fbc6593fa813cb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MjpegStreamer3D
-  streamUrl: https://substantially-stephen-famous-biodiversity.trycloudflare.com/cam/?action=stream
+  streamUrl: https://unacquiescent-quiana-excepable.ngrok-free.dev/cam/?action=stream
   updateInterval: 0.05
 --- !u!23 &550425569
 MeshRenderer:
@@ -7101,7 +7101,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9f39192f1018e3b4ea0414e8276261e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PLCController_v2
-  piBaseUrl: https://substantially-stephen-famous-biodiversity.trycloudflare.com/plc
+  piBaseUrl: https://unacquiescent-quiana-excepable.ngrok-free.dev/plc
   controlEndpoint: /control
   telemetryEndpoint: /telemetry
   pollInterval: 0.5
@@ -7125,7 +7125,7 @@ MonoBehaviour:
   canvasHmiScale: 0.5
   showWireLabels: 0
   wireLabelsCenter: {x: 917, y: -120}
-  url: https://substantially-stephen-famous-biodiversity.trycloudflare.com/plc/control
+  url: https://unacquiescent-quiana-excepable.ngrok-free.dev/plc/control
 --- !u!4 &1102621823
 Transform:
   m_ObjectHideFlags: 0

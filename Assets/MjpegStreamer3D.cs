@@ -35,6 +35,7 @@ public class MjpegStreamer3D : MonoBehaviour
         {
             using (UnityWebRequest uwr = UnityWebRequestTexture.GetTexture(snapshotUrl))
             {
+                uwr.SetRequestHeader("ngrok-skip-browser-warning", "true");
                 yield return uwr.SendWebRequest();
 
                 if (uwr.result != UnityWebRequest.Result.Success)
