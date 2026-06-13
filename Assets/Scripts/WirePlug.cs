@@ -43,6 +43,9 @@ public class WirePlug : MonoBehaviour
         // Tạo mặt phẳng làm việc dựa trên vị trí hiện tại của đầu dây (giả định bảng mạch nằm trên mặt phẳng này)
         // Nếu bảng mạch của bạn nằm dọc (trục Z cố định), dùng Vector3.forward
         boardPlane = new Plane(-transform.forward, transform.position);
+
+        if (isSnapped && connectedSocket != null)
+            connectedSocket.Connect(this);
     }
 
     void Update()
@@ -116,7 +119,7 @@ public class WirePlug : MonoBehaviour
 
         foreach (var s in all)
         {
-            if (s.isOccupied) continue;
+            if (!s.HasCapacity) continue;
             if (s.acceptColor != WireColor.Any && s.acceptColor != wireColor) continue;
 
             float dist = Vector3.Distance(transform.position, s.transform.position);
@@ -146,13 +149,24 @@ public class WirePlug : MonoBehaviour
     
     void SnapTo(SocketPoint socket)
     {
+        if (socket == null)
+        {
+            ClearHighlight();
+            return;
+        }
+
         isSnapped = true;
         connectedSocket = socket;
-        socket.isOccupied = true;
 
-        // Snap trực tiếp vào socket (pivot đã chuẩn)
-        transform.position = socket.transform.position;
-        transform.rotation = socket.transform.rotation;
+        if (!socket.Connect(this))
+        {
+            isSnapped = false;
+            connectedSocket = null;
+            ClearHighlight();
+            return;
+        }
+
+        socket.RefreshPlugPositions();
 
         Debug.Log($"<color=cyan>⚡ [SNAP]: {wireColor} -> {socket.socketID}</color>");
 
@@ -165,7 +179,7 @@ public class WirePlug : MonoBehaviour
     {
         if (connectedSocket != null)
         {
-            connectedSocket.isOccupied = false;
+            connectedSocket.Disconnect(this);
             connectedSocket = null;
         }
         isSnapped = false;

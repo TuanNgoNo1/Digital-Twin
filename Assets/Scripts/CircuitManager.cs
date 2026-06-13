@@ -38,6 +38,8 @@ public class CircuitManager : MonoBehaviour
 
     [Header("Cham diem")]
     public float totalScore = 100f;
+    [Tooltip("Tinh diem rieng cho moi WireBody co khai bao correctSocketA/B. Ho tro nhieu day dung chung socket hoac cung cap socket.")]
+    public bool scoreEveryConfiguredWire = true;
 
     private readonly HashSet<WireBody> correctlyConnectedWires = new HashSet<WireBody>();
     private readonly HashSet<string> connectedConnectionKeys = new HashSet<string>();
@@ -87,7 +89,7 @@ public class CircuitManager : MonoBehaviour
 
         EvaluateCircuit();
 
-        int correctCount = connectedConnectionKeys.Count;
+        int correctCount = correctlyConnectedWires.Count;
         float scorePerWire = totalScore / Mathf.Max(1, requiredWiresCount);
         float currentScore = correctCount * scorePerWire;
 
@@ -126,11 +128,10 @@ public class CircuitManager : MonoBehaviour
 
             wire.RefreshConnectionState(logResult: true);
 
-            string answerKey = MakeConnectionKey(wire.correctSocketA, wire.correctSocketB);
-
             if (wire.isFullyConnected && wire.isCorrect)
             {
-                if (requiredConnectionKeys.Count == 0 || requiredConnectionKeys.Contains(answerKey))
+                string answerKey = MakeConnectionKey(wire.correctSocketA, wire.correctSocketB);
+                if (scoreEveryConfiguredWire || requiredConnectionKeys.Count == 0 || requiredConnectionKeys.Contains(answerKey))
                 {
                     correctlyConnectedWires.Add(wire);
                     connectedConnectionKeys.Add(answerKey);
@@ -146,8 +147,11 @@ public class CircuitManager : MonoBehaviour
             }
         }
 
-        int wiresToCheck = Mathf.Max(1, requiredWiresCount);
-        int correctCount = connectedConnectionKeys.Count;
+        int wiresToCheck = scoreEveryConfiguredWire
+            ? Mathf.Max(1, wiresToEvaluate.Count)
+            : Mathf.Max(1, requiredWiresCount);
+        requiredWiresCount = wiresToCheck;
+        int correctCount = correctlyConnectedWires.Count;
 
         if (lastLoggedCorrectCount != correctCount || lastLoggedWiresToCheck != wiresToCheck)
         {
