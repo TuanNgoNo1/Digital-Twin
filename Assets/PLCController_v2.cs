@@ -77,6 +77,8 @@ public class PLCController_v2 : MonoBehaviour
     public Vector2 canvasHmiSize = new Vector2(300f, 250f);
     [Tooltip("Vi tri goc tren-trai cua bang HMI (pixel, tinh tu goc tren-trai man hinh).")]
     public Vector2 canvasHmiAnchoredPosition = new Vector2(16f, -16f);
+    [Tooltip("Object man HMI that trong Hierarchy. Keo RectTransform cua object nay de di chuyen toan bo HMI.")]
+    public GameObject hmiScreenObject;
     [Tooltip("Ty le thu nho bang HMI de khong che vung noi day.")]
     public float canvasHmiScale = 0.5f;
     [Header("Nhan day (chu mau)")]
@@ -97,6 +99,7 @@ public class PLCController_v2 : MonoBehaviour
     private Coroutine pollingJob;
     private string lastStatus = "";
     private GameObject canvasHmiRoot;
+    private RectTransform canvasHmiPanelRect;
     private TextMeshProUGUI hmiAngleText;
     private TextMeshProUGUI hmiRotText;
     private TextMeshProUGUI hmiSpeedText;
@@ -573,32 +576,48 @@ public class PLCController_v2 : MonoBehaviour
         if (canvasHmiRoot != null)
             return;
 
-        canvasHmiRoot = new GameObject("Runtime_Pi_HMI_Canvas");
-        Canvas canvas = canvasHmiRoot.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        bool usesSceneHmi = hmiScreenObject != null;
+        canvasHmiRoot = usesSceneHmi ? hmiScreenObject.transform.parent.gameObject : new GameObject("Runtime_Pi_HMI_Canvas");
+        Canvas canvas = canvasHmiRoot.GetComponent<Canvas>();
+        if (canvas == null)
+            canvas = canvasHmiRoot.AddComponent<Canvas>();
+        if (!usesSceneHmi)
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 1000;
 
-        CanvasScaler scaler = canvasHmiRoot.AddComponent<CanvasScaler>();
+        CanvasScaler scaler = canvasHmiRoot.GetComponent<CanvasScaler>();
+        if (scaler == null)
+            scaler = canvasHmiRoot.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1280f, 720f);
 
-        canvasHmiRoot.AddComponent<GraphicRaycaster>();
+        if (canvasHmiRoot.GetComponent<GraphicRaycaster>() == null)
+            canvasHmiRoot.AddComponent<GraphicRaycaster>();
 
         Color green = new Color(0.18f, 0.55f, 0.20f, 1f);
         Color red = new Color(0.72f, 0.12f, 0.12f, 1f);
         Color blueBtn = new Color(0.16f, 0.34f, 0.72f, 1f);
         Color redBtn = new Color(0.82f, 0.14f, 0.14f, 1f);
 
-        GameObject panel = new GameObject("HMI_Panel");
-        panel.transform.SetParent(canvasHmiRoot.transform, false);
-        RectTransform panelRect = panel.AddComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0f, 1f);
-        panelRect.anchorMax = new Vector2(0f, 1f);
-        panelRect.pivot = new Vector2(0f, 1f);
-        panelRect.anchoredPosition = canvasHmiAnchoredPosition;
-        panelRect.sizeDelta = new Vector2(600f, 300f);
-        panel.transform.localScale = Vector3.one * canvasHmiScale;
-        panel.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.25f);
+        GameObject panel = hmiScreenObject != null ? hmiScreenObject : new GameObject("HMI_Screen");
+        if (panel.transform.parent != canvasHmiRoot.transform)
+            panel.transform.SetParent(canvasHmiRoot.transform, false);
+        canvasHmiPanelRect = panel.GetComponent<RectTransform>();
+        if (canvasHmiPanelRect == null)
+            canvasHmiPanelRect = panel.AddComponent<RectTransform>();
+        if (!usesSceneHmi)
+        {
+            canvasHmiPanelRect.anchorMin = new Vector2(0f, 1f);
+            canvasHmiPanelRect.anchorMax = new Vector2(0f, 1f);
+            canvasHmiPanelRect.pivot = new Vector2(0f, 1f);
+            canvasHmiPanelRect.anchoredPosition = canvasHmiAnchoredPosition;
+            canvasHmiPanelRect.sizeDelta = new Vector2(600f, 300f);
+            panel.transform.localScale = Vector3.one * canvasHmiScale;
+        }
+        Image panelImage = panel.GetComponent<Image>();
+        if (panelImage == null)
+            panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(0f, 0f, 0f, 0.25f);
 
         Transform gp = MakeSubPanel(panel.transform, "Green", new Vector2(0f, 0f), new Vector2(410f, 300f), green);
         Transform rp = MakeSubPanel(panel.transform, "Red", new Vector2(410f, 0f), new Vector2(190f, 300f), red);

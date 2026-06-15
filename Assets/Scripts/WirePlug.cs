@@ -48,15 +48,21 @@ public class WirePlug : MonoBehaviour
     void Update()
     {
         if (mainCam == null) return;
+        if (CircuitManager.Instance != null && CircuitManager.Instance.IsPopupVisible) return;
 
         Vector3 mousePos = GetMousePosition();
         Ray ray = mainCam.ScreenPointToRay(mousePos);
 
         // Kiểm tra Hover
         bool isHovering = false;
-        if (Physics.Raycast(ray, out RaycastHit hit))
+        RaycastHit[] hits = Physics.RaycastAll(ray);
+        foreach (RaycastHit hit in hits)
         {
-            if (hit.collider == myCollider) isHovering = true;
+            if (hit.collider == myCollider)
+            {
+                isHovering = true;
+                break;
+            }
         }
 
         bool leftClickDown = (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame) || Input.GetMouseButtonDown(0);
@@ -67,6 +73,7 @@ public class WirePlug : MonoBehaviour
         {
             if (isSnapped) Unsnap();
             isDragging = true;
+            boardPlane = new Plane(-transform.forward, transform.position);
             Debug.Log($"[WirePlug {name}] Bắt đầu kéo");
 
             // Tính toán offset để khi cầm không bị giật về tâm
@@ -116,8 +123,7 @@ public class WirePlug : MonoBehaviour
 
         foreach (var s in all)
         {
-            if (s.isOccupied) continue;
-            if (s.acceptColor != WireColor.Any && s.acceptColor != wireColor) continue;
+            if (!s.CanAccept(wireColor)) continue;
 
             float dist = Vector3.Distance(transform.position, s.transform.position);
             if (dist < bestDist)

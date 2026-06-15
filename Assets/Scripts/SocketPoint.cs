@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 public class SocketPoint : MonoBehaviour
@@ -9,6 +10,16 @@ public class SocketPoint : MonoBehaviour
 
     private Material originalMat;
     private Renderer socketRenderer;
+
+    public bool AllowsMultipleConnections =>
+        string.Equals(socketID, "5VDC", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(socketID, "GND_5V", StringComparison.OrdinalIgnoreCase);
+
+    public bool CanAccept(WireColor wireColor)
+    {
+        bool colorAccepted = acceptColor == WireColor.Any || acceptColor == wireColor;
+        return colorAccepted && (AllowsMultipleConnections || !isOccupied);
+    }
 
     void Awake()
     {
