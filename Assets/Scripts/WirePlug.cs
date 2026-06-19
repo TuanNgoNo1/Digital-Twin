@@ -9,6 +9,7 @@ public class WirePlug : MonoBehaviour
     [Header("=== CẤU HÌNH ===")]
     public WireColor wireColor = WireColor.Yellow;
     public float snapDistance = 0.25f;
+    public string preferredSocketID = "";
     public bool isSnapped = false;
     public SocketPoint connectedSocket;
     public WireBody parentWire;
@@ -118,20 +119,34 @@ public class WirePlug : MonoBehaviour
     void FindNearestSocket()
     {
         SocketPoint[] all = FindObjectsByType<SocketPoint>(FindObjectsSortMode.None);
+        SocketPoint preferred = null;
         SocketPoint best = null;
+        float preferredDist = snapDistance;
         float bestDist = snapDistance;
+        bool hasPreferredSocket = !string.IsNullOrWhiteSpace(preferredSocketID);
 
         foreach (var s in all)
         {
             if (!s.CanAccept(wireColor)) continue;
 
             float dist = Vector3.Distance(transform.position, s.transform.position);
+            if (hasPreferredSocket &&
+                string.Equals(s.socketID, preferredSocketID, System.StringComparison.OrdinalIgnoreCase) &&
+                dist < preferredDist)
+            {
+                preferredDist = dist;
+                preferred = s;
+            }
+
             if (dist < bestDist)
             {
                 bestDist = dist;
                 best = s;
             }
         }
+
+        if (preferred != null)
+            best = preferred;
 
         if (best != nearestSocket)
         {
