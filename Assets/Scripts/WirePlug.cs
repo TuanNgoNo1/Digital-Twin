@@ -9,6 +9,7 @@ public class WirePlug : MonoBehaviour
     [Header("=== CẤU HÌNH ===")]
     public WireColor wireColor = WireColor.Yellow;
     public float snapDistance = 0.25f;
+    public string preferredSocketID = "";
     public bool isSnapped = false;
     public SocketPoint connectedSocket;
     public WireBody parentWire;
@@ -43,33 +44,44 @@ public class WirePlug : MonoBehaviour
         // Tạo mặt phẳng làm việc dựa trên vị trí hiện tại của đầu dây (giả định bảng mạch nằm trên mặt phẳng này)
         // Nếu bảng mạch của bạn nằm dọc (trục Z cố định), dùng Vector3.forward
         boardPlane = new Plane(-transform.forward, transform.position);
-
-        if (isSnapped && connectedSocket != null)
-            connectedSocket.Connect(this);
     }
 
     void Update()
     {
         if (mainCam == null) return;
+        if (CircuitManager.Instance != null && CircuitManager.Instance.IsPopupVisible) return;
 
         Vector3 mousePos = GetMousePosition();
         Ray ray = mainCam.ScreenPointToRay(mousePos);
-
-        // Kiểm tra Hover
-        bool isHovering = false;
-        if (Physics.Raycast(ray, out RaycastHit hit))
-        {
-            if (hit.collider == myCollider) isHovering = true;
-        }
 
         bool leftClickDown = (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame) || Input.GetMouseButtonDown(0);
         bool leftClickPressed = (Mouse.current != null && Mouse.current.leftButton.isPressed) || Input.GetMouseButton(0);
         bool leftClickUp = (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame) || Input.GetMouseButtonUp(0);
 
+        if (leftClickDown &&
+            CircuitManager.Instance != null &&
+            CircuitManager.Instance.IsPointerOverStepNavigation(mousePos))
+        {
+            return;
+        }
+
+        // Kiểm tra Hover
+        bool isHovering = false;
+        RaycastHit[] hits = Physics.RaycastAll(ray);
+        foreach (RaycastHit hit in hits)
+        {
+            if (hit.collider == myCollider)
+            {
+                isHovering = true;
+                break;
+            }
+        }
+
         if (leftClickDown && isHovering)
         {
             if (isSnapped) Unsnap();
             isDragging = true;
+            boardPlane = new Plane(-transform.forward, transform.position);
             Debug.Log($"[WirePlug {name}] Bắt đầu kéo");
 
             // Tính toán offset để khi cầm không bị giật về tâm
@@ -114,21 +126,34 @@ public class WirePlug : MonoBehaviour
     void FindNearestSocket()
     {
         SocketPoint[] all = FindObjectsByType<SocketPoint>(FindObjectsSortMode.None);
+        SocketPoint preferred = null;
         SocketPoint best = null;
+        float preferredDist = snapDistance;
         float bestDist = snapDistance;
+        bool hasPreferredSocket = !string.IsNullOrWhiteSpace(preferredSocketID);
 
         foreach (var s in all)
         {
-            if (!s.HasCapacity) continue;
-            if (s.acceptColor != WireColor.Any && s.acceptColor != wireColor) continue;
+            if (!s.CanAccept(wireColor)) continue;
 
             float dist = Vector3.Distance(transform.position, s.transform.position);
+            if (hasPreferredSocket &&
+                string.Equals(s.socketID, preferredSocketID, System.StringComparison.OrdinalIgnoreCase) &&
+                dist < preferredDist)
+            {
+                preferredDist = dist;
+                preferred = s;
+            }
+
             if (dist < bestDist)
             {
                 bestDist = dist;
                 best = s;
             }
         }
+
+        if (preferred != null)
+            best = preferred;
 
         if (best != nearestSocket)
         {
@@ -149,24 +174,13 @@ public class WirePlug : MonoBehaviour
     
     void SnapTo(SocketPoint socket)
     {
-        if (socket == null)
-        {
-            ClearHighlight();
-            return;
-        }
-
         isSnapped = true;
         connectedSocket = socket;
+        socket.isOccupied = true;
 
-        if (!socket.Connect(this))
-        {
-            isSnapped = false;
-            connectedSocket = null;
-            ClearHighlight();
-            return;
-        }
-
-        socket.RefreshPlugPositions();
+        // Snap trực tiếp vào socket (pivot đã chuẩn)
+        transform.position = socket.transform.position;
+        transform.rotation = socket.transform.rotation;
 
         Debug.Log($"<color=cyan>⚡ [SNAP]: {wireColor} -> {socket.socketID}</color>");
 
@@ -179,7 +193,7 @@ public class WirePlug : MonoBehaviour
     {
         if (connectedSocket != null)
         {
-            connectedSocket.Disconnect(this);
+            connectedSocket.isOccupied = false;
             connectedSocket = null;
         }
         isSnapped = false;

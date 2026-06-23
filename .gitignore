@@ -1,11 +1,18 @@
 # Track only the minimal Unity project structure.
 /*
 !/.gitignore
+!/HDCD.md
 !/.vscode/
 !/Assets/
 !/Packages/
 !/ProjectSettings/
 !/chats/
+!/gateway/
+!/gateway/fxplc_gateway/
+!/gateway/fxplc_gateway/**
+!/third_party/
+!/third_party/fxplc/
+!/third_party/fxplc/**
 
 # Unity generated files and local machine state.
 /[Ll]ibrary/
@@ -26,6 +33,8 @@
 /webgl-scorm/
 *.zip
 *.log
+__pycache__/
+*.pyc
 
 # Unity/editor generated files that should not be committed.
 /Assets/_Recovery.meta
