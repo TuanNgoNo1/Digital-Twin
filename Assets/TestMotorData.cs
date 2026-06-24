@@ -8,7 +8,7 @@ public class TestMotorData : MonoBehaviour
 
     [SerializeField] private float updateInterval = 0.5f; // Cập nhật mỗi 0.5 giây
     private float updateTimer = 0f;
-    private bool isAutoUpdate = true;
+    private bool isAutoUpdate = false;
 
     private void Start()
     {
@@ -17,12 +17,14 @@ public class TestMotorData : MonoBehaviour
 
         if (plcController == null || rotateBlades == null)
         {
-            Debug.LogError("❌ Không tìm thấy controller");
+            Debug.LogWarning("[TestMotorData] Không tìm thấy controller — tắt auto update.");
+            isAutoUpdate = false;
+            enabled = false;
         }
         else
         {
-            Debug.Log("<color=green>✅ TestMotorData initialized - Cập nhật tự động mỗi 0.5 giây</color>");
-            Debug.Log("<color=cyan>💡 Nhấn T để bật/tắt tự động cập nhật</color>");
+            Debug.Log("<color=green>✅ TestMotorData initialized - auto update đang TẮT để tránh timeout COM</color>");
+            Debug.Log("<color=cyan>💡 Nhấn T nếu muốn thử đọc dữ liệu PLC thủ công</color>");
         }
     }
 
@@ -64,6 +66,7 @@ public class TestMotorData : MonoBehaviour
         int tanSoXung = plcController.DocTanSoXungHienTai();
         bool isRotating = rotateBlades.GetIsRotating();
 
+        /* Tắt log định kỳ để tránh làm tràn Console
         Debug.Log($"<color=cyan>━━━ THÔNG SỐ MOTOR ━━━</color>");
         Debug.Log($"<color=yellow>📊 Tốc độ:</color> {tocDo} RPM");
         Debug.Log($"<color=yellow>🔄 Số vòng đã quay:</color> {soVongDaQuay:F2}");
@@ -73,5 +76,6 @@ public class TestMotorData : MonoBehaviour
         Debug.Log($"<color=yellow>📈 Tần số xung:</color> {tanSoXung}");
         Debug.Log($"<color=yellow>🔌 Trạng thái:</color> <color={(isRotating ? "green" : "red")}>{(isRotating ? "ĐANG QUAY" : "DỪNG")}</color>");
         Debug.Log($"<color=cyan>━━━━━━━━━━━━━━━━━━</color>");
+        */
     }
 }
