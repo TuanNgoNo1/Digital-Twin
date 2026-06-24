@@ -155,6 +155,7 @@ public class PLCController_v2 : MonoBehaviour
     private float hmiTargetRotations;
     private float hmiTargetAngle;
     private string selectedMotionMode = "";
+    private bool hasQueuedRunCommand;
     private bool initialized;
     private float visualDegreesPerSecond;
     private bool visualDirectionForward = true;
@@ -296,8 +297,16 @@ public class PLCController_v2 : MonoBehaviour
 
     public void TurnOn()
     {
-        RefreshHmiInputCacheBeforeStart();
-        float speed = hmiTargetSpeed > 0f ? Mathf.Clamp(hmiTargetSpeed, 1f, 100f) : 0f;
+        if (!HasValidQueuedRunCommand())
+        {
+            Debug.LogWarning("[PLCController_v2] START ignored: chua SET so vong/goc hop le.");
+            ShowHmiStatusMessage("Chua SET vong/goc", new Color(0.9f, 0.42f, 0.05f, 1f));
+            return;
+        }
+
+        float speed = hmiTargetSpeed > 0f
+            ? Mathf.Clamp(hmiTargetSpeed, 1f, 100f)
+            : Mathf.Max(0f, LatestTelemetry.setSpeedRpm);
         SendControl("ON", speed: speed, rotations: hmiTargetRotations, angle: hmiTargetAngle, mode: selectedMotionMode);
     }
 
@@ -308,11 +317,19 @@ public class PLCController_v2 : MonoBehaviour
 
     public void SetSpeed(float rpm)
     {
+        float previousSpeed = hmiTargetSpeed;
         hmiTargetSpeed = Mathf.Clamp(rpm, 1f, 100f);
         LatestTelemetry.setSpeedRpm = hmiTargetSpeed;
         if (hmiSpeedInput != null)
             hmiSpeedInput.text = hmiTargetSpeed.ToString("F0");
-        SendControl("SET_SPEED", speed: hmiTargetSpeed);
+
+        int pulseDelta = Mathf.RoundToInt(hmiTargetSpeed - Mathf.Max(0f, previousSpeed));
+        if (pulseDelta > 0)
+            SendControl("SPEED_UP", speed: pulseDelta);
+        else if (pulseDelta < 0)
+            SendControl("SPEED_DOWN", speed: -pulseDelta);
+        else
+            PublishTelemetry();
     }
 
     // Tang/giam toc bang xung M15/M16 (giong nut +/- tren HMI cung).
@@ -337,20 +354,61 @@ public class PLCController_v2 : MonoBehaviour
 
     public void SetTargetRotations(float rotations)
     {
-        hmiTargetRotations = Mathf.Max(0f, rotations);
+        float value = Mathf.Max(0f, rotations);
+        if (value <= 0f)
+        {
+            Debug.LogWarning("[PLCController_v2] SET_ROTATIONS ignored: gia tri phai lon hon 0.");
+            ShowHmiStatusMessage("Gia tri vong khong hop le", new Color(0.9f, 0.42f, 0.05f, 1f));
+            return;
+        }
+
+        hmiTargetRotations = value;
         hmiTargetAngle = 0f;
         selectedMotionMode = "rotations";
+        hasQueuedRunCommand = true;
         LatestTelemetry.motionMode = selectedMotionMode;
         SendControl("SET_ROTATIONS", rotations: hmiTargetRotations, angle: 0f, mode: selectedMotionMode);
     }
 
     public void SetTargetAngle(float angle)
     {
-        hmiTargetAngle = Mathf.Max(0f, angle);
+        float value = Mathf.Max(0f, angle);
+        if (value <= 0f)
+        {
+            Debug.LogWarning("[PLCController_v2] SET_ANGLE ignored: gia tri phai lon hon 0.");
+            ShowHmiStatusMessage("Gia tri goc khong hop le", new Color(0.9f, 0.42f, 0.05f, 1f));
+            return;
+        }
+
+        hmiTargetAngle = value;
         hmiTargetRotations = 0f;
         selectedMotionMode = "angle";
+        hasQueuedRunCommand = true;
         LatestTelemetry.motionMode = selectedMotionMode;
         SendControl("SET_ANGLE", rotations: 0f, angle: hmiTargetAngle, mode: selectedMotionMode);
+    }
+
+    private bool HasValidQueuedRunCommand()
+    {
+        if (!hasQueuedRunCommand)
+            return false;
+
+        if (selectedMotionMode == "rotations")
+            return hmiTargetRotations > 0f;
+
+        if (selectedMotionMode == "angle")
+            return hmiTargetAngle > 0f;
+
+        return false;
+    }
+
+    private void ShowHmiStatusMessage(string message, Color color)
+    {
+        if (hmiStatusText == null)
+            return;
+
+        hmiStatusText.text = $"Trang thai: {message}";
+        hmiStatusText.color = color;
     }
 
     private void RefreshHmiInputCacheBeforeStart()
@@ -414,6 +472,7 @@ public class PLCController_v2 : MonoBehaviour
         hmiTargetRotations = 0f;
         hmiTargetAngle = 0f;
         selectedMotionMode = "";
+        hasQueuedRunCommand = false;
         LatestTelemetry.setSpeedRpm = 0f;
         LatestTelemetry.motionMode = "";
 
@@ -489,7 +548,7 @@ public class PLCController_v2 : MonoBehaviour
 
     private void SendControl(string action, float speed = -1f, float rotations = -1f, float angle = -1f, string direction = "", string mode = "")
     {
-        if (speed < 0f) speed = hmiTargetSpeed > 0f ? hmiTargetSpeed : fallbackSpeedRpm;
+        if (speed < 0f) speed = hmiTargetSpeed > 0f ? hmiTargetSpeed : 0f;
         if (rotations < 0f) rotations = hmiTargetRotations;
         if (angle < 0f) angle = hmiTargetAngle;
         if (string.IsNullOrWhiteSpace(direction)) direction = LatestTelemetry.direction;
@@ -511,8 +570,21 @@ public class PLCController_v2 : MonoBehaviour
 
         StartCoroutine(PostControlRoutine(command));
 
-        if (optimisticLocalTelemetry)
+        if (ShouldApplyLocalTelemetryImmediately(command))
             ApplyOptimisticTelemetry(command);
+        else if (optimisticLocalTelemetry)
+            ApplyOptimisticTelemetry(command);
+    }
+
+    private bool ShouldApplyLocalTelemetryImmediately(ControlCommand command)
+    {
+        if (command == null)
+            return false;
+
+        string action = command.action ?? "";
+        return action.Equals("ON", StringComparison.OrdinalIgnoreCase)
+            || action.Equals("OFF", StringComparison.OrdinalIgnoreCase)
+            || action.Equals("SET_DIRECTION", StringComparison.OrdinalIgnoreCase);
     }
 
     private IEnumerator PostControlRoutine(ControlCommand command)
@@ -526,7 +598,7 @@ public class PLCController_v2 : MonoBehaviour
             request.downloadHandler = new DownloadHandlerBuffer();
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("ngrok-skip-browser-warning", "true");
-            request.timeout = timeoutSeconds;
+            request.timeout = GetRequestTimeoutSeconds(command);
 
             UnityWebRequestAsyncOperation operation;
             try
@@ -550,8 +622,49 @@ public class PLCController_v2 : MonoBehaviour
             else
             {
                 SetConnectionStatus(true, $"PI OK: {command.action}");
-                Debug.Log($"[PLCController_v2] Control {command.action}: {request.downloadHandler.text}");
+                string responseText = request.downloadHandler.text;
+                Debug.Log($"[PLCController_v2] Control {command.action}: {responseText}");
+                ApplyTelemetryFromControlResponse(responseText);
             }
+        }
+    }
+
+    private int GetRequestTimeoutSeconds(ControlCommand command)
+    {
+        int baseTimeout = Mathf.Max(1, timeoutSeconds);
+        if (command == null || string.IsNullOrWhiteSpace(command.action))
+            return baseTimeout;
+
+        bool isSpeedPulse = command.action.Equals("SPEED_UP", StringComparison.OrdinalIgnoreCase)
+            || command.action.Equals("SPEED_DOWN", StringComparison.OrdinalIgnoreCase);
+        if (!isSpeedPulse)
+            return baseTimeout;
+
+        int pulseCount = Mathf.Max(1, Mathf.RoundToInt(Mathf.Abs(command.speed)));
+        return Mathf.Max(baseTimeout, Mathf.CeilToInt(2f + pulseCount * 0.18f));
+    }
+
+    private void ApplyTelemetryFromControlResponse(string responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+            return;
+
+        bool looksLikeTelemetry =
+            responseText.IndexOf("\"running\"", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            responseText.IndexOf("\"speedRpm\"", StringComparison.OrdinalIgnoreCase) >= 0;
+
+        if (!looksLikeTelemetry)
+            return;
+
+        try
+        {
+            MotorTelemetry telemetry = JsonUtility.FromJson<MotorTelemetry>(responseText);
+            if (telemetry != null)
+                ApplyTelemetry(telemetry, true);
+        }
+        catch (Exception ex)
+        {
+            Debug.LogWarning($"[PLCController_v2] Khong doc duoc telemetry tu control response: {ex.Message}");
         }
     }
 
@@ -620,7 +733,9 @@ public class PLCController_v2 : MonoBehaviour
         if (string.IsNullOrWhiteSpace(telemetry.direction)) telemetry.direction = LatestTelemetry.direction;
         if (fromPi)
         {
-            telemetry.setSpeedRpm = telemetry.setSpeedRpm > 0f ? Mathf.Clamp(telemetry.setSpeedRpm, 1f, 100f) : 0f;
+            telemetry.setSpeedRpm = telemetry.setSpeedRpm > 0f
+                ? Mathf.Clamp(telemetry.setSpeedRpm, 1f, 100f)
+                : hmiTargetSpeed;
         }
         else if (telemetry.setSpeedRpm <= 0f)
             telemetry.setSpeedRpm = hmiTargetSpeed;
@@ -642,15 +757,20 @@ public class PLCController_v2 : MonoBehaviour
     {
         LatestTelemetry.action = command.action;
         LatestTelemetry.timestamp = command.timestamp;
-        LatestTelemetry.setSpeedRpm = command.speed;
+        LatestTelemetry.setSpeedRpm = hmiTargetSpeed > 0f ? hmiTargetSpeed : Mathf.Max(0f, command.speed);
         LatestTelemetry.direction = command.direction;
         LatestTelemetry.motionMode = command.mode;
         LatestTelemetry.backendSynced = false;
         LatestTelemetry.backendStatus = IsPiOnline ? "PENDING" : "LOCAL_FALLBACK";
 
-        if (command.action == "ON")
+        if (command.rotations > 0f)
+            LatestTelemetry.rotations = command.rotations;
+        if (command.angle > 0f)
+            LatestTelemetry.angle = command.angle;
+
+        if (command.action.Equals("ON", StringComparison.OrdinalIgnoreCase))
             LatestTelemetry.running = true;
-        else if (command.action == "OFF")
+        else if (command.action.Equals("OFF", StringComparison.OrdinalIgnoreCase))
             LatestTelemetry.running = false;
 
         SyncMotorFromTelemetry();
