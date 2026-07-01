@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class WireBody : MonoBehaviour
 {
@@ -29,6 +30,8 @@ public class WireBody : MonoBehaviour
     private Vector3 lastP0;
     private Vector3 lastP3;
     private MeshRenderer meshRend;
+    private const int WireOverlayQueue = 5000;
+    private static readonly int ColorProperty = Shader.PropertyToID("_Color");
 
     void Start()
     {
@@ -48,6 +51,11 @@ public class WireBody : MonoBehaviour
         lr.useWorldSpace = true;
         lr.numCapVertices = 3;
         lr.numCornerVertices = 3;
+        lr.alignment = LineAlignment.View;
+        lr.textureMode = LineTextureMode.Stretch;
+        lr.shadowCastingMode = ShadowCastingMode.Off;
+        lr.receiveShadows = false;
+        lr.sortingOrder = WireOverlayQueue;
         lr.enabled = plugA != null && plugB != null;
 
         SetWireMaterial();
@@ -61,6 +69,20 @@ public class WireBody : MonoBehaviour
 
         if (plugB != null)
             plugB.parentWire = this;
+
+        bool hasDistinctTargets = !string.IsNullOrWhiteSpace(correctSocketA)
+            && !string.IsNullOrWhiteSpace(correctSocketB)
+            && !string.Equals(correctSocketA, correctSocketB, StringComparison.OrdinalIgnoreCase);
+        bool duplicatePreferred = plugA != null
+            && plugB != null
+            && !string.IsNullOrWhiteSpace(plugA.preferredSocketID)
+            && string.Equals(plugA.preferredSocketID, plugB.preferredSocketID, StringComparison.OrdinalIgnoreCase);
+
+        if (hasDistinctTargets && duplicatePreferred)
+        {
+            plugA.preferredSocketID = correctSocketA;
+            plugB.preferredSocketID = correctSocketB;
+        }
     }
 
     void Update()
@@ -86,17 +108,49 @@ public class WireBody : MonoBehaviour
 
     void SetWireMaterial()
     {
-        Material mat = new Material(Shader.Find("Sprites/Default"));
+        Color wireColorValue = GetWireColor();
+        Material sourceMaterial = Resources.Load<Material>("WireOverlayMaterial");
+        Material mat = sourceMaterial != null
+            ? new Material(sourceMaterial)
+            : CreateFallbackWireMaterial();
+
+        mat.renderQueue = WireOverlayQueue;
+        if (mat.HasProperty(ColorProperty))
+        {
+            mat.SetColor(ColorProperty, wireColorValue);
+            wireColorValue = Color.white;
+        }
+
+        lr.startColor = wireColorValue;
+        lr.endColor = wireColorValue;
+        lr.material = mat;
+    }
+
+    private Color GetWireColor()
+    {
         switch (wireColor)
         {
-            case WireColor.Yellow: mat.color = new Color(1f, 0.85f, 0f); break;
-            case WireColor.Red: mat.color = Color.red; break;
-            case WireColor.Black: mat.color = new Color(0.1f, 0.1f, 0.1f); break;
-            case WireColor.Green: mat.color = new Color(0f, 0.8f, 0.2f); break;
-            case WireColor.Blue: mat.color = new Color(0.1f, 0.4f, 1f); break;
-            default: mat.color = Color.white; break;
+            case WireColor.Yellow: return new Color(1f, 0.85f, 0f);
+            case WireColor.Red: return Color.red;
+            case WireColor.Black: return new Color(0.1f, 0.1f, 0.1f);
+            case WireColor.Green: return new Color(0f, 0.8f, 0.2f);
+            case WireColor.Blue: return new Color(0.1f, 0.4f, 1f);
+            default: return Color.white;
         }
-        lr.material = mat;
+    }
+
+    private Material CreateFallbackWireMaterial()
+    {
+        Shader shader = Shader.Find("DigitalTwin/WireOverlay");
+        if (shader == null)
+            shader = Shader.Find("UI/Default");
+        if (shader == null)
+            shader = Shader.Find("Sprites/Default");
+
+        Material mat = new Material(shader);
+        mat.renderQueue = WireOverlayQueue;
+        mat.SetFloat("unity_GUIZTestMode", (float)CompareFunction.Always);
+        return mat;
     }
 
     void UpdateLinePositions()

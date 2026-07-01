@@ -46,6 +46,9 @@ public class CircuitManager : MonoBehaviour
     public float cameraDesignAspect = 2.25f;
     public float cameraDesignVerticalFov = 60f;
 
+    [Header("Heading tren bang socket - chi Buoc 1 den 3")]
+    public bool createBoardStepHeading = true;
+
     [Header("HMI chi mo sau khi xong ca ba buoc")]
     public string hmiSceneName = "HMI_scene";
     public GameObject hmiPanel;
@@ -74,6 +77,7 @@ public class CircuitManager : MonoBehaviour
     private TextMeshProUGUI popupMessageText;
     private Image popupIconBackground;
     private Image popupAccent;
+    private BoardStepHeading boardStepHeading;
 
     public bool IsPopupVisible => popupVisible || Time.frameCount == popupClosedFrame;
 
@@ -110,6 +114,7 @@ public class CircuitManager : MonoBehaviour
         CreateStepResultPopup();
         CreateStepNavigationBar();
         EnsureResponsiveCameraFraming();
+        EnsureBoardStepHeading();
 
         if (arrangeWireHeadsOnStart)
             ArrangeAllSteps();
@@ -146,6 +151,19 @@ public class CircuitManager : MonoBehaviour
         framing.designAspect = cameraDesignAspect;
         framing.designVerticalFov = cameraDesignVerticalFov;
         framing.ApplyFraming();
+    }
+
+    private void EnsureBoardStepHeading()
+    {
+        if (!createBoardStepHeading)
+            return;
+
+        boardStepHeading = FindFirstObjectByType<BoardStepHeading>(FindObjectsInactive.Include);
+        if (boardStepHeading == null)
+        {
+            GameObject headingObject = new GameObject("BoardStepHeading");
+            boardStepHeading = headingObject.AddComponent<BoardStepHeading>();
+        }
     }
 
     public void OnWireConnectedCorrectly(WireBody wire)
@@ -223,6 +241,9 @@ public class CircuitManager : MonoBehaviour
             if (i < guideRoots.Count && guideRoots[i] != null)
                 guideRoots[i].SetActive(i == visibleStepIndex);
         }
+
+        if (boardStepHeading != null)
+            boardStepHeading.ShowStep(visibleStepIndex);
     }
 
     private void ShowAllCompletedWires()
@@ -242,6 +263,9 @@ public class CircuitManager : MonoBehaviour
             if (guideRoot != null)
                 guideRoot.SetActive(false);
         }
+
+        if (boardStepHeading != null)
+            boardStepHeading.Hide();
 
         Debug.Log("[Circuit] Da hien lai day ket noi cua ca ba buoc.");
     }
