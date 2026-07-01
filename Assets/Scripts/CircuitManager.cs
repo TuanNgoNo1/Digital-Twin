@@ -10,6 +10,15 @@ public class CircuitManager : MonoBehaviour
 {
     private const int NavigationStepCount = 4;
     private const int HmiStepIndex = 3;
+    private const int WireLayoutSlotCount = 6;
+    private static readonly string[] NavigationStepTitles = { "Bước 1", "Bước 2", "Bước 3", "Bước 4" };
+    private static readonly string[] NavigationStepDescriptions =
+    {
+        "Đấu nối mạch điều khiển động cơ",
+        "Đấu nối encoder",
+        "Đấu nối mạch lực",
+        "Vận hành"
+    };
 
     public static CircuitManager Instance;
 
@@ -23,6 +32,7 @@ public class CircuitManager : MonoBehaviour
     public Vector3 layoutCenter = new Vector3(256.14f, 0.08f, -47.286f);
     public float columnSpacing = 0.055f;
     public float rowSpacing = 0.07f;
+    public float wireDisplayLength = 0.1f;
 
     [Header("Object legacy khong tham gia gameplay")]
     public List<GameObject> objectsToDisable = new List<GameObject>();
@@ -38,7 +48,7 @@ public class CircuitManager : MonoBehaviour
 
     [Header("Thanh xem lai bon buoc")]
     public bool createStepNavigationBar = true;
-    public Vector2 stepNavigationButtonSize = new Vector2(118f, 44f);
+    public Vector2 stepNavigationButtonSize = new Vector2(172f, 82f);
     public Vector2 stepNavigationMargin = new Vector2(24f, 24f);
 
     [Header("Camera responsive khong crop hai ben")]
@@ -71,13 +81,29 @@ public class CircuitManager : MonoBehaviour
     private GameObject stepNavigationRoot;
     private RectTransform stepNavigationPanelRect;
     private readonly List<Button> stepNavigationButtons = new List<Button>();
-    private readonly List<TextMeshProUGUI> stepNavigationLabels = new List<TextMeshProUGUI>();
+    private readonly List<StepNavigationItem> stepNavigationItems = new List<StepNavigationItem>();
+    private readonly List<SocketPoint> focusedStepSockets = new List<SocketPoint>();
     private TextMeshProUGUI popupIconText;
     private TextMeshProUGUI popupStatusText;
     private TextMeshProUGUI popupMessageText;
     private Image popupIconBackground;
     private Image popupAccent;
     private BoardStepHeading boardStepHeading;
+    private static Sprite roundedRectangleSprite;
+    private static Sprite socketLabelBackgroundSprite;
+    private static Sprite circleSprite;
+    private static Sprite ringSprite;
+    private static Sprite playTriangleSprite;
+
+    private sealed class StepNavigationItem
+    {
+        public Image Background;
+        public Image Border;
+        public Image Shadow;
+        public TextMeshProUGUI Title;
+        public TextMeshProUGUI Description;
+        public readonly List<Graphic> IconGraphics = new List<Graphic>();
+    }
 
     public bool IsPopupVisible => popupVisible || Time.frameCount == popupClosedFrame;
 
@@ -244,6 +270,8 @@ public class CircuitManager : MonoBehaviour
 
         if (boardStepHeading != null)
             boardStepHeading.ShowStep(visibleStepIndex);
+
+        UpdateStepSocketFocus(visibleStepIndex);
     }
 
     private void ShowAllCompletedWires()
@@ -267,7 +295,53 @@ public class CircuitManager : MonoBehaviour
         if (boardStepHeading != null)
             boardStepHeading.Hide();
 
+        ClearStepSocketFocus();
+
         Debug.Log("[Circuit] Da hien lai day ket noi cua ca ba buoc.");
+    }
+
+    private void UpdateStepSocketFocus(int stepIndex)
+    {
+        ClearStepSocketFocus();
+        if (stepIndex < 0 || stepIndex >= stepRoots.Count)
+            return;
+
+        HashSet<string> socketIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (WireBody wire in GetStepWires(stepRoots[stepIndex]))
+        {
+            if (!string.IsNullOrWhiteSpace(wire.correctSocketA))
+                socketIds.Add(wire.correctSocketA.Trim());
+            if (!string.IsNullOrWhiteSpace(wire.correctSocketB))
+                socketIds.Add(wire.correctSocketB.Trim());
+        }
+
+        if (socketIds.Count == 0)
+            return;
+
+        foreach (SocketPoint socket in Resources.FindObjectsOfTypeAll<SocketPoint>())
+        {
+            if (socket == null ||
+                !socket.gameObject.scene.IsValid() ||
+                string.IsNullOrWhiteSpace(socket.socketID) ||
+                !socketIds.Contains(socket.socketID.Trim()))
+            {
+                continue;
+            }
+
+            socket.SetGuideFocus(true);
+            focusedStepSockets.Add(socket);
+        }
+    }
+
+    private void ClearStepSocketFocus()
+    {
+        foreach (SocketPoint socket in focusedStepSockets)
+        {
+            if (socket != null)
+                socket.SetGuideFocus(false);
+        }
+
+        focusedStepSockets.Clear();
     }
 
     private static void SetStepInteractionEnabled(GameObject stepRoot, bool enabled)
@@ -407,17 +481,18 @@ public class CircuitManager : MonoBehaviour
         if (wires.Count == 0)
             return;
 
-        float firstX = layoutCenter.x - columnSpacing * (wires.Count - 1) * 0.5f;
-        float topY = layoutCenter.y + rowSpacing * 0.5f;
-        float bottomY = layoutCenter.y - rowSpacing * 0.5f;
+        int slotCount = Mathf.Max(WireLayoutSlotCount, wires.Count);
+        float firstY = layoutCenter.y + rowSpacing * (slotCount - 1) * 0.5f;
+        float leftX = layoutCenter.x - wireDisplayLength * 0.5f;
+        float rightX = layoutCenter.x + wireDisplayLength * 0.5f;
 
         for (int i = 0; i < wires.Count; i++)
         {
             WireBody wire = wires[i];
-            float x = firstX + i * columnSpacing;
+            float y = firstY - i * rowSpacing;
 
-            PreparePlugForLayout(wire.plugA, new Vector3(x, topY, layoutCenter.z), wire);
-            PreparePlugForLayout(wire.plugB, new Vector3(x, bottomY, layoutCenter.z), wire);
+            PreparePlugForLayout(wire.plugA, new Vector3(leftX, y, layoutCenter.z), wire);
+            PreparePlugForLayout(wire.plugB, new Vector3(rightX, y, layoutCenter.z), wire);
         }
     }
 
@@ -644,8 +719,17 @@ public class CircuitManager : MonoBehaviour
             {
                 Transform parent = label.transform.parent;
                 string backgroundName = "Background_" + label.name;
-                if (parent == null || parent.Find(backgroundName) != null)
+                if (parent == null)
                     continue;
+
+                Transform existingBackground = parent.Find(backgroundName);
+                if (existingBackground != null)
+                {
+                    Image existingImage = existingBackground.GetComponent<Image>();
+                    if (existingImage != null)
+                        ApplySocketLabelBackgroundStyle(existingImage);
+                    continue;
+                }
 
                 CreateSocketLabelBackground(label, parent, backgroundName);
                 createdCount++;
@@ -685,7 +769,14 @@ public class CircuitManager : MonoBehaviour
         backgroundCanvas.sortingOrder = labelCanvas != null ? labelCanvas.sortingOrder - 1 : 99;
 
         Image image = background.GetComponent<Image>();
+        ApplySocketLabelBackgroundStyle(image);
+    }
+
+    private void ApplySocketLabelBackgroundStyle(Image image)
+    {
         image.color = socketLabelBackgroundColor;
+        image.sprite = GetSocketLabelBackgroundSprite();
+        image.type = Image.Type.Sliced;
         image.raycastTarget = false;
     }
 
@@ -832,14 +923,17 @@ public class CircuitManager : MonoBehaviour
         if (!createStepNavigationBar || stepNavigationRoot != null)
             return;
 
-        const float horizontalPadding = 10f;
-        const float verticalPadding = 10f;
-        const float buttonSpacing = 8f;
+        const float horizontalPadding = 8f;
+        const float verticalPadding = 8f;
+        const float buttonSpacing = 10f;
+        Vector2 buttonSize = new Vector2(
+            Mathf.Max(stepNavigationButtonSize.x, 172f),
+            Mathf.Max(stepNavigationButtonSize.y, 82f));
         float panelWidth =
             horizontalPadding * 2f +
-            stepNavigationButtonSize.x * NavigationStepCount +
+            buttonSize.x * NavigationStepCount +
             buttonSpacing * (NavigationStepCount - 1);
-        float panelHeight = verticalPadding * 2f + stepNavigationButtonSize.y;
+        float panelHeight = verticalPadding * 2f + buttonSize.y;
 
         stepNavigationRoot = new GameObject(
             "StepNavigation_Canvas",
@@ -860,7 +954,8 @@ public class CircuitManager : MonoBehaviour
         GameObject panel = CreatePopupImage(
             stepNavigationRoot.transform,
             "StepNavigationBar",
-            new Color(0.045f, 0.065f, 0.1f, 0.94f));
+            Color.clear);
+        panel.GetComponent<Image>().raycastTarget = false;
         stepNavigationPanelRect = panel.GetComponent<RectTransform>();
         stepNavigationPanelRect.anchorMin = Vector2.zero;
         stepNavigationPanelRect.anchorMax = Vector2.zero;
@@ -869,86 +964,185 @@ public class CircuitManager : MonoBehaviour
         stepNavigationPanelRect.sizeDelta = new Vector2(panelWidth, panelHeight);
 
         stepNavigationButtons.Clear();
-        stepNavigationLabels.Clear();
+        stepNavigationItems.Clear();
 
         for (int i = 0; i < NavigationStepCount; i++)
         {
             int stepIndex = i;
+
+            Vector2 buttonPosition = new Vector2(
+                horizontalPadding + i * (buttonSize.x + buttonSpacing),
+                0f);
+
+            GameObject shadowObject = CreatePopupImage(
+                panel.transform,
+                $"Step_{i + 1}_Shadow",
+                new Color(0.06f, 0.09f, 0.16f, 0.16f));
+            Image shadowImage = shadowObject.GetComponent<Image>();
+            shadowImage.sprite = GetRoundedRectangleSprite();
+            shadowImage.type = Image.Type.Sliced;
+            shadowImage.raycastTarget = false;
+            SetLeftCenteredRect(
+                shadowObject.GetComponent<RectTransform>(),
+                buttonSize,
+                buttonPosition + new Vector2(0f, -3f));
+
+            GameObject borderObject = CreatePopupImage(
+                panel.transform,
+                $"Step_{i + 1}_Border",
+                new Color(0.84f, 0.87f, 0.92f, 1f));
+            Image borderImage = borderObject.GetComponent<Image>();
+            borderImage.sprite = GetRoundedRectangleSprite();
+            borderImage.type = Image.Type.Sliced;
+            borderImage.raycastTarget = false;
+            SetLeftCenteredRect(
+                borderObject.GetComponent<RectTransform>(),
+                buttonSize + new Vector2(2f, 2f),
+                buttonPosition + new Vector2(-1f, 0f));
+
             GameObject buttonObject = CreatePopupImage(
                 panel.transform,
                 $"Step_{i + 1}_Button",
                 Color.white);
+            Image buttonImage = buttonObject.GetComponent<Image>();
+            buttonImage.sprite = GetRoundedRectangleSprite();
+            buttonImage.type = Image.Type.Sliced;
 
             RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
-            buttonRect.anchorMin = new Vector2(0f, 0.5f);
-            buttonRect.anchorMax = new Vector2(0f, 0.5f);
-            buttonRect.pivot = new Vector2(0f, 0.5f);
-            buttonRect.anchoredPosition = new Vector2(
-                horizontalPadding + i * (stepNavigationButtonSize.x + buttonSpacing),
-                0f);
-            buttonRect.sizeDelta = stepNavigationButtonSize;
+            SetLeftCenteredRect(buttonRect, buttonSize, buttonPosition);
 
             Button button = buttonObject.AddComponent<Button>();
+            button.targetGraphic = buttonImage;
             button.transition = Selectable.Transition.ColorTint;
             button.onClick.AddListener(() => ShowStepFromNavigation(stepIndex));
             stepNavigationButtons.Add(button);
 
-            TextMeshProUGUI label = CreatePopupText(
+            StepNavigationItem item = new StepNavigationItem
+            {
+                Background = buttonImage,
+                Border = borderImage,
+                Shadow = shadowImage
+            };
+
+            item.IconGraphics.AddRange(CreateStepNavigationIcon(buttonObject.transform, i));
+
+            TextMeshProUGUI title = CreatePopupText(
                 buttonObject.transform,
-                "Text",
-                $"B\u01B0\u1EDBc {i + 1}",
-                19f,
+                "Title",
+                NavigationStepTitles[i],
+                15f,
                 FontStyles.Bold,
-                Color.white,
+                new Color(0.37f, 0.43f, 0.52f, 1f),
                 TextAlignmentOptions.Center);
-            StretchRect(label.rectTransform);
-            stepNavigationLabels.Add(label);
+            title.enableAutoSizing = true;
+            title.fontSizeMin = 14f;
+            title.fontSizeMax = 17f;
+            SetCenteredRect(title.rectTransform, new Vector2(122f, 24f), new Vector2(20f, 22f));
+            item.Title = title;
+
+            TextMeshProUGUI description = CreatePopupText(
+                buttonObject.transform,
+                "Description",
+                NavigationStepDescriptions[i],
+                13f,
+                FontStyles.Bold,
+                new Color(0.48f, 0.55f, 0.64f, 1f),
+                TextAlignmentOptions.Center);
+            description.enableAutoSizing = true;
+            description.enableWordWrapping = true;
+            description.fontSizeMin = 11f;
+            description.fontSizeMax = 14f;
+            SetCenteredRect(description.rectTransform, new Vector2(160f, 40f), new Vector2(0f, -16f));
+            item.Description = description;
+
+            stepNavigationItems.Add(item);
         }
     }
 
     private void UpdateStepNavigationBar()
     {
-        if (stepNavigationButtons.Count != NavigationStepCount)
+        if (stepNavigationButtons.Count != NavigationStepCount ||
+            stepNavigationItems.Count != NavigationStepCount)
             return;
 
-        Color lockedColor = new Color(0.22f, 0.25f, 0.31f, 1f);
-        Color unlockedColor = new Color(0.12f, 0.31f, 0.52f, 1f);
-        Color completedColor = new Color(0.08f, 0.5f, 0.31f, 1f);
-        Color selectedColor = new Color(0.04f, 0.46f, 0.84f, 1f);
+        Color selectedBackground = new Color(0.04f, 0.39f, 0.92f, 1f);
+        Color normalBackground = new Color(1f, 1f, 1f, 1f);
+        Color lockedBackground = new Color(0.96f, 0.97f, 0.99f, 1f);
+        Color selectedText = Color.white;
+        Color normalTitle = new Color(0.36f, 0.42f, 0.51f, 1f);
+        Color normalDescription = new Color(0.5f, 0.57f, 0.66f, 1f);
+        Color lockedText = new Color(0.58f, 0.64f, 0.72f, 1f);
+        Color normalBorder = new Color(0.84f, 0.87f, 0.92f, 1f);
+        Color selectedBorder = new Color(0.04f, 0.39f, 0.92f, 1f);
+        Color lockedBorder = new Color(0.88f, 0.9f, 0.94f, 1f);
+        Color shadowColor = new Color(0.06f, 0.09f, 0.16f, 0.16f);
 
         for (int i = 0; i < stepNavigationButtons.Count; i++)
         {
             Button button = stepNavigationButtons[i];
+            StepNavigationItem item = stepNavigationItems[i];
             bool isUnlocked = i <= highestUnlockedStepIndex;
-            bool isCompleted = i < currentStepIndex;
             bool isSelected = i == visibleStepIndex;
-            Color baseColor = !isUnlocked
-                ? lockedColor
+            Color backgroundColor = !isUnlocked
+                ? lockedBackground
                 : isSelected
-                    ? selectedColor
-                    : isCompleted
-                        ? completedColor
-                        : unlockedColor;
+                    ? selectedBackground
+                    : normalBackground;
 
             button.interactable = isUnlocked;
             ColorBlock colors = button.colors;
-            colors.normalColor = baseColor;
-            colors.highlightedColor = LightenColor(baseColor, 0.1f);
-            colors.pressedColor = DarkenColor(baseColor, 0.18f);
-            colors.selectedColor = baseColor;
-            colors.disabledColor = lockedColor;
+            colors.normalColor = backgroundColor;
+            colors.highlightedColor = isSelected
+                ? LightenColor(selectedBackground, 0.08f)
+                : new Color(0.94f, 0.97f, 1f, 1f);
+            colors.pressedColor = isSelected
+                ? DarkenColor(selectedBackground, 0.12f)
+                : new Color(0.89f, 0.93f, 0.98f, 1f);
+            colors.selectedColor = backgroundColor;
+            colors.disabledColor = lockedBackground;
             colors.colorMultiplier = 1f;
             colors.fadeDuration = 0.08f;
             button.colors = colors;
 
             if (button.targetGraphic != null)
-                button.targetGraphic.color = baseColor;
+                button.targetGraphic.color = backgroundColor;
 
-            if (i < stepNavigationLabels.Count)
+            if (item.Background != null)
+                item.Background.color = backgroundColor;
+
+            if (item.Border != null)
+                item.Border.color = !isUnlocked
+                    ? lockedBorder
+                    : isSelected
+                        ? selectedBorder
+                        : normalBorder;
+
+            if (item.Shadow != null)
+                item.Shadow.color = isSelected
+                    ? new Color(0.04f, 0.25f, 0.55f, 0.24f)
+                    : shadowColor;
+
+            Color titleColor = !isUnlocked
+                ? lockedText
+                : isSelected
+                    ? selectedText
+                    : normalTitle;
+            Color descriptionColor = !isUnlocked
+                ? lockedText
+                : isSelected
+                    ? selectedText
+                    : normalDescription;
+
+            if (item.Title != null)
+                item.Title.color = titleColor;
+
+            if (item.Description != null)
+                item.Description.color = descriptionColor;
+
+            foreach (Graphic iconGraphic in item.IconGraphics)
             {
-                stepNavigationLabels[i].color = isUnlocked
-                    ? Color.white
-                    : new Color(0.62f, 0.66f, 0.72f, 1f);
+                if (iconGraphic != null)
+                    iconGraphic.color = titleColor;
             }
         }
     }
@@ -983,6 +1177,60 @@ public class CircuitManager : MonoBehaviour
         Image image = gameObject.GetComponent<Image>();
         image.color = color;
         return gameObject;
+    }
+
+    private static List<Graphic> CreateStepNavigationIcon(Transform parent, int stepIndex)
+    {
+        GameObject iconRoot = new GameObject("Icon", typeof(RectTransform));
+        iconRoot.transform.SetParent(parent, false);
+        SetCenteredRect(iconRoot.GetComponent<RectTransform>(), new Vector2(22f, 22f), new Vector2(-42f, 16f));
+
+        List<Graphic> graphics = new List<Graphic>();
+        switch (stepIndex)
+        {
+            case 0:
+                graphics.Add(CreateIconImage(iconRoot.transform, "CableLine", new Vector2(16f, 2.4f), new Vector2(0f, -1f), -28f, GetRoundedRectangleSprite()));
+                graphics.Add(CreateIconImage(iconRoot.transform, "PlugA", new Vector2(6.5f, 7f), new Vector2(-6f, 3.2f), -28f, GetRoundedRectangleSprite()));
+                graphics.Add(CreateIconImage(iconRoot.transform, "PlugB", new Vector2(6.5f, 7f), new Vector2(6f, -5.2f), -28f, GetRoundedRectangleSprite()));
+                break;
+            case 1:
+                graphics.Add(CreateIconImage(iconRoot.transform, "PowerRing", new Vector2(18f, 18f), Vector2.zero, 0f, GetRingSprite()));
+                graphics.Add(CreateIconImage(iconRoot.transform, "PowerLine", new Vector2(3f, 10f), new Vector2(0f, 4.5f), 0f, GetRoundedRectangleSprite()));
+                break;
+            case 2:
+                graphics.Add(CreateIconImage(iconRoot.transform, "SearchRing", new Vector2(14f, 14f), new Vector2(-2f, 2f), 0f, GetRingSprite()));
+                graphics.Add(CreateIconImage(iconRoot.transform, "SearchHandle", new Vector2(9f, 3f), new Vector2(5f, -5f), -45f, GetRoundedRectangleSprite()));
+                break;
+            default:
+                graphics.Add(CreateIconImage(iconRoot.transform, "RunRing", new Vector2(18f, 18f), Vector2.zero, 0f, GetRingSprite()));
+                graphics.Add(CreateIconImage(iconRoot.transform, "RunPlay", new Vector2(9f, 11f), new Vector2(1.4f, 0f), 0f, GetPlayTriangleSprite()));
+                break;
+        }
+
+        return graphics;
+    }
+
+    private static Image CreateIconImage(
+        Transform parent,
+        string objectName,
+        Vector2 size,
+        Vector2 position,
+        float rotationZ = 0f,
+        Sprite sprite = null)
+    {
+        GameObject imageObject = CreatePopupImage(parent, objectName, Color.white);
+        Image image = imageObject.GetComponent<Image>();
+        image.raycastTarget = false;
+        if (sprite != null)
+        {
+            image.sprite = sprite;
+            image.type = Image.Type.Simple;
+        }
+
+        RectTransform rect = imageObject.GetComponent<RectTransform>();
+        SetCenteredRect(rect, size, position);
+        rect.localEulerAngles = new Vector3(0f, 0f, rotationZ);
+        return image;
     }
 
     private static TextMeshProUGUI CreatePopupText(
@@ -1027,6 +1275,208 @@ public class CircuitManager : MonoBehaviour
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = position;
         rect.sizeDelta = size;
+    }
+
+    private static void SetLeftCenteredRect(RectTransform rect, Vector2 size, Vector2 position)
+    {
+        rect.anchorMin = new Vector2(0f, 0.5f);
+        rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+    }
+
+    private static Sprite GetRoundedRectangleSprite()
+    {
+        if (roundedRectangleSprite != null)
+            return roundedRectangleSprite;
+
+        roundedRectangleSprite = CreateRoundedSprite("RuntimeRoundedRectangle", 64, 12);
+        return roundedRectangleSprite;
+    }
+
+    private static Sprite GetSocketLabelBackgroundSprite()
+    {
+        if (socketLabelBackgroundSprite != null)
+            return socketLabelBackgroundSprite;
+
+        socketLabelBackgroundSprite = CreateRoundedSprite("RuntimeSocketLabelBackground", 64, 12);
+        return socketLabelBackgroundSprite;
+    }
+
+    private static Sprite GetCircleSprite()
+    {
+        if (circleSprite != null)
+            return circleSprite;
+
+        circleSprite = CreateRoundedSprite("RuntimeCircle", 32, 16);
+        return circleSprite;
+    }
+
+    private static Sprite GetRingSprite()
+    {
+        if (ringSprite != null)
+            return ringSprite;
+
+        ringSprite = CreateRingSprite("RuntimeIconRing", 64, 25f, 18f);
+        return ringSprite;
+    }
+
+    private static Sprite GetPlayTriangleSprite()
+    {
+        if (playTriangleSprite != null)
+            return playTriangleSprite;
+
+        playTriangleSprite = CreatePlayTriangleSprite("RuntimePlayTriangle", 64);
+        return playTriangleSprite;
+    }
+
+    private static Sprite CreateRingSprite(string textureName, int size, float outerRadius, float innerRadius)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.ARGB32, false)
+        {
+            name = textureName,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+
+        Color[] pixels = new Color[size * size];
+        Color clear = new Color(1f, 1f, 1f, 0f);
+        float center = size * 0.5f;
+        float outerSqr = outerRadius * outerRadius;
+        float innerSqr = innerRadius * innerRadius;
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x + 0.5f - center;
+                float dy = y + 0.5f - center;
+                float distanceSqr = dx * dx + dy * dy;
+                pixels[y * size + x] = distanceSqr <= outerSqr && distanceSqr >= innerSqr
+                    ? Color.white
+                    : clear;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect);
+        sprite.hideFlags = HideFlags.HideAndDontSave;
+        return sprite;
+    }
+
+    private static Sprite CreatePlayTriangleSprite(string textureName, int size)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.ARGB32, false)
+        {
+            name = textureName,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+
+        Color[] pixels = new Color[size * size];
+        Color clear = new Color(1f, 1f, 1f, 0f);
+        Vector2 leftTop = new Vector2(0.26f, 0.18f);
+        Vector2 leftBottom = new Vector2(0.26f, 0.82f);
+        Vector2 rightCenter = new Vector2(0.82f, 0.5f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                Vector2 point = new Vector2((x + 0.5f) / size, (y + 0.5f) / size);
+                pixels[y * size + x] = IsPointInTriangle(point, leftTop, leftBottom, rightCenter)
+                    ? Color.white
+                    : clear;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect);
+        sprite.hideFlags = HideFlags.HideAndDontSave;
+        return sprite;
+    }
+
+    private static bool IsPointInTriangle(Vector2 point, Vector2 a, Vector2 b, Vector2 c)
+    {
+        float d1 = TriangleSign(point, a, b);
+        float d2 = TriangleSign(point, b, c);
+        float d3 = TriangleSign(point, c, a);
+
+        bool hasNegative = d1 < 0f || d2 < 0f || d3 < 0f;
+        bool hasPositive = d1 > 0f || d2 > 0f || d3 > 0f;
+        return !(hasNegative && hasPositive);
+    }
+
+    private static float TriangleSign(Vector2 p1, Vector2 p2, Vector2 p3)
+    {
+        return (p1.x - p3.x) * (p2.y - p3.y) -
+            (p2.x - p3.x) * (p1.y - p3.y);
+    }
+
+    private static Sprite CreateRoundedSprite(string textureName, int size, int radius)
+    {
+        Texture2D texture = new Texture2D(size, size, TextureFormat.ARGB32, false)
+        {
+            name = textureName,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+
+        Color[] pixels = new Color[size * size];
+        Color clear = new Color(1f, 1f, 1f, 0f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                bool inside = IsInsideRoundedRect(x + 0.5f, y + 0.5f, size, radius);
+                pixels[y * size + x] = inside ? Color.white : clear;
+            }
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply();
+
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            new Vector4(radius, radius, radius, radius));
+        sprite.hideFlags = HideFlags.HideAndDontSave;
+        return sprite;
+    }
+
+    private static bool IsInsideRoundedRect(float x, float y, int size, int radius)
+    {
+        float left = radius;
+        float right = size - radius;
+        float bottom = radius;
+        float top = size - radius;
+
+        if ((x >= left && x <= right) || (y >= bottom && y <= top))
+            return true;
+
+        float centerX = x < left ? left : right;
+        float centerY = y < bottom ? bottom : top;
+        float dx = x - centerX;
+        float dy = y - centerY;
+        return dx * dx + dy * dy <= radius * radius;
     }
 
     private void LockSystem()

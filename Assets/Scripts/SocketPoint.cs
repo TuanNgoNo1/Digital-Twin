@@ -3,13 +3,22 @@ using UnityEngine;
 
 public class SocketPoint : MonoBehaviour
 {
+    private const float GuideFocusScale = 1.1f;
+    private const int GuideFocusSegments = 32;
+    private const float GuideFocusRingRadius = 0.3f;
+    private const float GuideFocusRingWorldWidth = 0.0008f;
+
     public string socketID;
     public WireColor acceptColor = WireColor.Any;
     public bool isOccupied = false;
     public Material highlightMat;
 
     private Material originalMat;
+    private Material guideFocusRingMat;
     private Renderer socketRenderer;
+    private GameObject guideFocusRing;
+    private Vector3 originalLocalScale;
+    private bool hasOriginalState;
 
     public bool AllowsMultipleConnections =>
         string.Equals(socketID, "5VDC", StringComparison.OrdinalIgnoreCase) ||
@@ -23,14 +32,90 @@ public class SocketPoint : MonoBehaviour
 
     void Awake()
     {
-        socketRenderer = GetComponent<Renderer>();
-        if (socketRenderer != null)
-            originalMat = socketRenderer.material;
+        CaptureOriginalState();
     }
 
     public void SetHighlight(bool on)
     {
         if (socketRenderer == null || highlightMat == null) return;
         socketRenderer.material = on ? highlightMat : originalMat;
+    }
+
+    public void SetGuideFocus(bool on)
+    {
+        CaptureOriginalState();
+        transform.localScale = on ? originalLocalScale * GuideFocusScale : originalLocalScale;
+
+        EnsureGuideFocusRing();
+        guideFocusRing.SetActive(on);
+    }
+
+    private void CaptureOriginalState()
+    {
+        if (hasOriginalState)
+            return;
+
+        originalLocalScale = transform.localScale;
+        socketRenderer = GetComponent<Renderer>();
+        if (socketRenderer != null)
+            originalMat = socketRenderer.material;
+
+        hasOriginalState = true;
+    }
+
+    private void EnsureGuideFocusRing()
+    {
+        if (guideFocusRing != null)
+            return;
+
+        guideFocusRing = new GameObject("SocketGuideFocus");
+        guideFocusRing.transform.SetParent(transform, false);
+        guideFocusRing.transform.localPosition = new Vector3(0f, 0f, 0.16f);
+        guideFocusRing.transform.localRotation = Quaternion.identity;
+        guideFocusRing.transform.localScale = Vector3.one;
+
+        LineRenderer ring = guideFocusRing.AddComponent<LineRenderer>();
+        ring.useWorldSpace = false;
+        ring.loop = true;
+        ring.positionCount = GuideFocusSegments;
+        ring.startWidth = GuideFocusRingWorldWidth;
+        ring.endWidth = GuideFocusRingWorldWidth;
+        ring.numCapVertices = 2;
+        ring.numCornerVertices = 2;
+        ring.alignment = LineAlignment.View;
+        ring.sortingOrder = 4500;
+        ring.material = GetGuideFocusRingMaterial();
+        Color ringColor = new Color(1f, 0.96f, 0.78f, 0.75f);
+        ring.startColor = ringColor;
+        ring.endColor = ringColor;
+
+        for (int i = 0; i < GuideFocusSegments; i++)
+        {
+            float angle = i * Mathf.PI * 2f / GuideFocusSegments;
+            ring.SetPosition(
+                i,
+                new Vector3(
+                    Mathf.Cos(angle) * GuideFocusRingRadius,
+                    Mathf.Sin(angle) * GuideFocusRingRadius,
+                    0f));
+        }
+
+        guideFocusRing.SetActive(false);
+    }
+
+    private Material GetGuideFocusRingMaterial()
+    {
+        if (guideFocusRingMat != null)
+            return guideFocusRingMat;
+
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null)
+            shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        guideFocusRingMat = new Material(shader);
+        guideFocusRingMat.renderQueue = 4500;
+        return guideFocusRingMat;
     }
 }
