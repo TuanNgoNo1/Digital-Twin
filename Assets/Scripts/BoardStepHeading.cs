@@ -17,7 +17,8 @@ public class BoardStepHeading : MonoBehaviour
     [SerializeField] private float headingHeight = 112f;
     [SerializeField] private float widthRelativeToBoard = 0.96f;
     [SerializeField] private float verticalGap = 0.018f;
-    [SerializeField] private float cameraDepthOffset = 0.02f;
+    [SerializeField] private float cameraDepthOffset = -0.12f;
+    [SerializeField] private float targetViewportTop = 0.99f;
 
     private Canvas canvas;
     private RectTransform canvasRect;
@@ -26,6 +27,7 @@ public class BoardStepHeading : MonoBehaviour
     private Sprite roundedSprite;
     private Renderer boardRenderer;
     private Renderer boardFrameRenderer;
+    private bool isVisible;
     private bool missingBoardWarningLogged;
 
     private void Awake()
@@ -45,14 +47,22 @@ public class BoardStepHeading : MonoBehaviour
             BuildUi();
 
         stepTitleText.text = StepTitles[stepIndex];
+        isVisible = true;
         headingRect.gameObject.SetActive(true);
         PositionAsWorldObject();
     }
 
     public void Hide()
     {
+        isVisible = false;
         if (headingRect != null)
             headingRect.gameObject.SetActive(false);
+    }
+
+    private void LateUpdate()
+    {
+        if (isVisible)
+            PositionAsWorldObject();
     }
 
     private void BuildUi()
@@ -172,13 +182,44 @@ public class BoardStepHeading : MonoBehaviour
             ? boardFrameRenderer.bounds.max.y
             : boardBounds.max.y;
 
+        Camera camera = Camera.main;
+        if (canvas != null)
+            canvas.worldCamera = camera;
+
         Transform canvasTransform = canvasRect.transform;
         canvasTransform.localScale = Vector3.one * worldScale;
-        canvasTransform.rotation = boardRenderer.transform.rotation;
+        canvasTransform.rotation = camera != null
+            ? camera.transform.rotation
+            : boardRenderer.transform.rotation;
         canvasTransform.position = new Vector3(
             boardBounds.center.x,
             topEdge + verticalGap + worldHeight * 0.5f,
             boardBounds.center.z - cameraDepthOffset);
+
+        AlignTopToViewport(camera, canvasTransform);
+    }
+
+    private void AlignTopToViewport(Camera camera, Transform canvasTransform)
+    {
+        if (camera == null || canvasRect == null)
+            return;
+
+        Vector3[] corners = new Vector3[4];
+        canvasRect.GetWorldCorners(corners);
+
+        float currentTop = float.NegativeInfinity;
+        for (int i = 0; i < corners.Length; i++)
+        {
+            Vector3 viewportPoint = camera.WorldToViewportPoint(corners[i]);
+            if (viewportPoint.z <= 0f)
+                return;
+
+            currentTop = Mathf.Max(currentTop, viewportPoint.y);
+        }
+
+        Vector3 centerViewportPoint = camera.WorldToViewportPoint(canvasTransform.position);
+        centerViewportPoint.y += targetViewportTop - currentTop;
+        canvasTransform.position = camera.ViewportToWorldPoint(centerViewportPoint);
     }
 
     private GameObject CreateImage(

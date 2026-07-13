@@ -2113,7 +2113,7 @@ Transform:
   m_GameObject: {fileID: 240499300}
   serializedVersion: 2
   m_LocalRotation: {x: -0.0023875393, y: 0.004721664, z: 0.00044886634, w: 0.9999859}
-  m_LocalPosition: {x: 256.059, y: 0.026, z: -47.776}
+  m_LocalPosition: {x: 256.059, y: 0.026, z: -47.785}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -5040,7 +5040,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &626978301
 Transform:
   m_ObjectHideFlags: 0
@@ -10427,9 +10427,29 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -5313232518954935487, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.06899974
+      objectReference: {fileID: 0}
+    - target: {fileID: -3340453824885196934, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.06899973
+      objectReference: {fileID: 0}
+    - target: {fileID: -900828502668290913, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.06899974
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
       propertyPath: m_Name
       value: 3D_Thay_Tien_1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6063329460619265424, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.069
+      objectReference: {fileID: 0}
+    - target: {fileID: 7051602851226207557, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0.06899974
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
