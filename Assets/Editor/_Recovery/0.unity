@@ -6697,7 +6697,7 @@ MonoBehaviour:
   - {fileID: 139823138}
   rotationSpeed: 100
   rotationAxis: {x: 1, y: 0, z: 0}
-  rotationDirection: -1
+  rotationDirection: 1
   soVongCanQuay: 1000
 --- !u!114 &914698186
 MonoBehaviour:
@@ -10427,10 +10427,6 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
-    - target: {fileID: -6232500740019406112, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0.0344
-      objectReference: {fileID: 0}
     - target: {fileID: -5313232518954935487, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
       propertyPath: m_LocalPosition.z
       value: 0.06899974
@@ -10454,10 +10450,6 @@ PrefabInstance:
     - target: {fileID: 7051602851226207557, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
       propertyPath: m_LocalPosition.z
       value: 0.06899974
-      objectReference: {fileID: 0}
-    - target: {fileID: 7232101457485182090, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
-      propertyPath: m_Name
-      value: PLC
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

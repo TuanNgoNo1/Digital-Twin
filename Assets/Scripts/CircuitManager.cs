@@ -11,6 +11,8 @@ public class CircuitManager : MonoBehaviour
     private const int NavigationStepCount = 4;
     private const int HmiStepIndex = 3;
     private const int WireLayoutSlotCount = 6;
+    private const string StartSceneName = "StartScene";
+    private const string CompletionCheatCode = "6394";
     private static readonly string[] NavigationStepTitles = { "Bước 1", "Bước 2", "Bước 3", "Bước 4" };
     private static readonly string[] NavigationStepDescriptions =
     {
@@ -77,9 +79,12 @@ public class CircuitManager : MonoBehaviour
     private int visibleStepIndex;
     private int highestUnlockedStepIndex;
     private bool hmiSceneLoading;
+    private string cheatCodeBuffer = string.Empty;
     private GameObject stepResultPopupRoot;
     private GameObject stepNavigationRoot;
+    private GameObject guideReturnRoot;
     private RectTransform stepNavigationPanelRect;
+    private RectTransform guideReturnButtonRect;
     private readonly List<Button> stepNavigationButtons = new List<Button>();
     private readonly List<StepNavigationItem> stepNavigationItems = new List<StepNavigationItem>();
     private readonly List<SocketPoint> focusedStepSockets = new List<SocketPoint>();
@@ -94,6 +99,13 @@ public class CircuitManager : MonoBehaviour
     private static Sprite circleSprite;
     private static Sprite ringSprite;
     private static Sprite playTriangleSprite;
+    private static bool hasSavedProgress;
+    private static int savedCurrentStepIndex;
+    private static int savedVisibleStepIndex;
+    private static int savedHighestUnlockedStepIndex;
+    private static int savedCompletedWires;
+    private static bool savedSystemUnlocked;
+    private static readonly List<SavedWireConnection> savedWireConnections = new List<SavedWireConnection>();
 
     private sealed class StepNavigationItem
     {
@@ -103,6 +115,14 @@ public class CircuitManager : MonoBehaviour
         public TextMeshProUGUI Title;
         public TextMeshProUGUI Description;
         public readonly List<Graphic> IconGraphics = new List<Graphic>();
+    }
+
+    private sealed class SavedWireConnection
+    {
+        public int StepIndex;
+        public string WireName;
+        public string SocketA;
+        public string SocketB;
     }
 
     public bool IsPopupVisible => popupVisible || Time.frameCount == popupClosedFrame;
@@ -115,6 +135,11 @@ public class CircuitManager : MonoBehaviour
     private void Start()
     {
         InitializeGame();
+    }
+
+    private void Update()
+    {
+        HandleCompletionCheatCode();
     }
 
     public void InitializeGame()
@@ -139,6 +164,7 @@ public class CircuitManager : MonoBehaviour
         EnsureSocketLabelBackgrounds();
         CreateStepResultPopup();
         CreateStepNavigationBar();
+        CreateGuideReturnButton();
         EnsureResponsiveCameraFraming();
         EnsureBoardStepHeading();
 
@@ -151,8 +177,19 @@ public class CircuitManager : MonoBehaviour
         highestUnlockedStepIndex = 0;
         completedWires = 0;
         LockSystem();
-        ShowOnlyStep(currentStepIndex);
+        RestoreProgressIfNeeded();
+        if (visibleStepIndex == HmiStepIndex && systemUnlocked)
+        {
+            ShowAllCompletedWires();
+            OpenHmiScene();
+        }
+        else
+        {
+            ShowOnlyStep(visibleStepIndex);
+        }
+
         UpdateStepNavigationBar();
+        UpdateGuideReturnButton();
 
         Debug.Log($"[Circuit] Bat dau Buoc 1: {GetStepWires(stepRoots[0]).Count} day. Tong cong {totalWires} day.");
         EvaluateCircuit();
@@ -226,6 +263,68 @@ public class CircuitManager : MonoBehaviour
         ShowStepCompletedPopup();
     }
 
+    private void HandleCompletionCheatCode()
+    {
+        if (!initialized || string.IsNullOrEmpty(Input.inputString))
+            return;
+
+        foreach (char inputChar in Input.inputString)
+        {
+            if (!char.IsDigit(inputChar))
+                continue;
+
+            cheatCodeBuffer += inputChar;
+            if (cheatCodeBuffer.Length > CompletionCheatCode.Length)
+                cheatCodeBuffer = cheatCodeBuffer.Substring(cheatCodeBuffer.Length - CompletionCheatCode.Length);
+
+            if (cheatCodeBuffer == CompletionCheatCode)
+            {
+                CompleteAllWiringStepsWithCheat();
+                cheatCodeBuffer = string.Empty;
+                return;
+            }
+        }
+    }
+
+    private void CompleteAllWiringStepsWithCheat()
+    {
+        if (systemUnlocked)
+            return;
+
+        pendingStepCompletion = false;
+        popupVisible = false;
+
+        if (stepResultPopupRoot != null)
+            stepResultPopupRoot.SetActive(false);
+
+        currentStepIndex = stepRoots.Count;
+        visibleStepIndex = HmiStepIndex;
+        highestUnlockedStepIndex = HmiStepIndex;
+        completedWires = totalWires;
+
+        foreach (GameObject stepRoot in stepRoots)
+        {
+            if (stepRoot == null)
+                continue;
+
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                if (wire == null)
+                    continue;
+
+                wire.isFullyConnected = true;
+                wire.isCorrect = true;
+            }
+        }
+
+        ShowAllCompletedWires();
+        UnlockSystem();
+        UpdateStepNavigationBar();
+        UpdateGuideReturnButton();
+
+        Debug.Log("[Circuit] Cheat code 6394: da hoan thien 3 buoc noi day va mo Buoc 4.");
+    }
+
     private void CompleteCurrentStep()
     {
         int completedStepNumber = currentStepIndex + 1;
@@ -272,6 +371,7 @@ public class CircuitManager : MonoBehaviour
             boardStepHeading.ShowStep(visibleStepIndex);
 
         UpdateStepSocketFocus(visibleStepIndex);
+        UpdateGuideReturnButton();
     }
 
     private void ShowAllCompletedWires()
@@ -296,6 +396,7 @@ public class CircuitManager : MonoBehaviour
             boardStepHeading.Hide();
 
         ClearStepSocketFocus();
+        UpdateGuideReturnButton();
 
         Debug.Log("[Circuit] Da hien lai day ket noi cua ca ba buoc.");
     }
@@ -375,6 +476,7 @@ public class CircuitManager : MonoBehaviour
             ShowAllCompletedWires();
             OpenHmiScene();
             UpdateStepNavigationBar();
+            UpdateGuideReturnButton();
             Debug.Log("[Circuit] Dang xem Buoc 4: HMI.");
             return;
         }
@@ -383,6 +485,7 @@ public class CircuitManager : MonoBehaviour
         visibleStepIndex = stepIndex;
         ShowOnlyStep(visibleStepIndex);
         UpdateStepNavigationBar();
+        UpdateGuideReturnButton();
         Debug.Log($"[Circuit] Dang xem lai Buoc {stepIndex + 1}.");
     }
 
@@ -434,13 +537,23 @@ public class CircuitManager : MonoBehaviour
 
     public bool IsPointerOverStepNavigation(Vector2 screenPosition)
     {
-        return stepNavigationRoot != null &&
+        bool overStepNavigation = stepNavigationRoot != null &&
             stepNavigationRoot.activeInHierarchy &&
             stepNavigationPanelRect != null &&
             RectTransformUtility.RectangleContainsScreenPoint(
                 stepNavigationPanelRect,
                 screenPosition,
                 null);
+
+        bool overGuideReturn = guideReturnRoot != null &&
+            guideReturnRoot.activeInHierarchy &&
+            guideReturnButtonRect != null &&
+            RectTransformUtility.RectangleContainsScreenPoint(
+                guideReturnButtonRect,
+                screenPosition,
+                null);
+
+        return overStepNavigation || overGuideReturn;
     }
 
     private static void HideStepPresentationObjects(GameObject stepRoot)
@@ -1057,6 +1170,232 @@ public class CircuitManager : MonoBehaviour
 
             stepNavigationItems.Add(item);
         }
+    }
+
+    private void CreateGuideReturnButton()
+    {
+        if (guideReturnRoot != null)
+            return;
+
+        guideReturnRoot = new GameObject(
+            "GuideReturn_Canvas",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler),
+            typeof(GraphicRaycaster));
+
+        Canvas canvas = guideReturnRoot.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 4950;
+
+        CanvasScaler scaler = guideReturnRoot.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        GameObject buttonObject = CreatePopupImage(
+            guideReturnRoot.transform,
+            "GuideReturnButton",
+            Color.white);
+        Image buttonImage = buttonObject.GetComponent<Image>();
+        buttonImage.sprite = GetRoundedRectangleSprite();
+        buttonImage.type = Image.Type.Sliced;
+
+        RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
+        guideReturnButtonRect = buttonRect;
+        buttonRect.anchorMin = new Vector2(0f, 1f);
+        buttonRect.anchorMax = new Vector2(0f, 1f);
+        buttonRect.pivot = new Vector2(0f, 1f);
+        buttonRect.anchoredPosition = new Vector2(24f, -24f);
+        buttonRect.sizeDelta = new Vector2(210f, 58f);
+
+        Button button = buttonObject.AddComponent<Button>();
+        button.targetGraphic = buttonImage;
+        button.transition = Selectable.Transition.ColorTint;
+        button.onClick.AddListener(ReturnToGuidePage);
+
+        ColorBlock colors = button.colors;
+        colors.normalColor = new Color(1f, 1f, 1f, 0.95f);
+        colors.highlightedColor = new Color(0.94f, 0.97f, 1f, 1f);
+        colors.pressedColor = new Color(0.86f, 0.92f, 0.99f, 1f);
+        colors.selectedColor = colors.normalColor;
+        button.colors = colors;
+
+        TextMeshProUGUI text = CreatePopupText(
+            buttonObject.transform,
+            "Label",
+            "V\u1ec1 h\u01b0\u1edbng d\u1eabn",
+            22f,
+            FontStyles.Bold,
+            new Color(0.11f, 0.18f, 0.29f, 1f),
+            TextAlignmentOptions.Center);
+        text.enableAutoSizing = true;
+        text.fontSizeMin = 15f;
+        text.fontSizeMax = 22f;
+        SetCenteredRect(text.rectTransform, new Vector2(190f, 42f), Vector2.zero);
+
+        UpdateGuideReturnButton();
+    }
+
+    private void UpdateGuideReturnButton()
+    {
+        if (guideReturnRoot != null)
+            guideReturnRoot.SetActive(visibleStepIndex >= 0 && visibleStepIndex < HmiStepIndex);
+    }
+
+    private void ReturnToGuidePage()
+    {
+        SaveProgressForGuideReturn();
+        StartScreenController.OpenGuidePageOnStart = true;
+        StartScreenController.ContinuePracticeFromGuide = false;
+        SceneManager.LoadScene(StartSceneName);
+    }
+
+    private void SaveProgressForGuideReturn()
+    {
+        hasSavedProgress = true;
+        savedCurrentStepIndex = currentStepIndex;
+        savedVisibleStepIndex = visibleStepIndex;
+        savedHighestUnlockedStepIndex = highestUnlockedStepIndex;
+        savedCompletedWires = completedWires;
+        savedSystemUnlocked = systemUnlocked;
+        SaveWireConnections();
+    }
+
+    private void RestoreProgressIfNeeded()
+    {
+        if (!StartScreenController.ContinuePracticeFromGuide)
+            return;
+
+        StartScreenController.ContinuePracticeFromGuide = false;
+
+        if (!hasSavedProgress)
+            return;
+
+        currentStepIndex = Mathf.Clamp(savedCurrentStepIndex, 0, stepRoots.Count);
+        visibleStepIndex = Mathf.Clamp(savedVisibleStepIndex, 0, HmiStepIndex);
+        highestUnlockedStepIndex = Mathf.Clamp(savedHighestUnlockedStepIndex, 0, HmiStepIndex);
+        completedWires = savedCompletedWires;
+        RestoreWireConnections();
+
+        if (savedSystemUnlocked)
+        {
+            systemUnlocked = true;
+            SetObjectAndParentsActive(hmiPanel, true);
+
+            if (cameraStream != null)
+                cameraStream.SetActive(true);
+
+            if (plcControllerV2 != null)
+                plcControllerV2.SetRuntimeHmiVisible(true);
+        }
+
+        Debug.Log($"[Circuit] Tiep tuc tu huong dan: Buoc dang lam {currentStepIndex + 1}, dang xem Buoc {visibleStepIndex + 1}.");
+    }
+
+    private void SaveWireConnections()
+    {
+        savedWireConnections.Clear();
+
+        for (int stepIndex = 0; stepIndex < stepRoots.Count; stepIndex++)
+        {
+            GameObject stepRoot = stepRoots[stepIndex];
+            if (stepRoot == null)
+                continue;
+
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                if (wire == null)
+                    continue;
+
+                savedWireConnections.Add(new SavedWireConnection
+                {
+                    StepIndex = stepIndex,
+                    WireName = wire.name,
+                    SocketA = GetConnectedSocketId(wire.plugA),
+                    SocketB = GetConnectedSocketId(wire.plugB)
+                });
+            }
+        }
+    }
+
+    private void RestoreWireConnections()
+    {
+        if (savedWireConnections.Count == 0)
+            return;
+
+        for (int stepIndex = 0; stepIndex < stepRoots.Count; stepIndex++)
+        {
+            GameObject stepRoot = stepRoots[stepIndex];
+            if (stepRoot == null)
+                continue;
+
+            Dictionary<string, SavedWireConnection> savedByWireName = savedWireConnections
+                .Where(saved => saved.StepIndex == stepIndex)
+                .GroupBy(saved => saved.WireName)
+                .ToDictionary(group => group.Key, group => group.First());
+            Dictionary<string, SocketPoint> socketsById = FindSocketsById(stepRoot);
+
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                if (wire == null || !savedByWireName.TryGetValue(wire.name, out SavedWireConnection saved))
+                    continue;
+
+                RestorePlugConnection(wire.plugA, saved.SocketA, socketsById);
+                RestorePlugConnection(wire.plugB, saved.SocketB, socketsById);
+                wire.RefreshConnectionState();
+            }
+        }
+    }
+
+    private static Dictionary<string, SocketPoint> FindSocketsById(GameObject stepRoot)
+    {
+        Dictionary<string, SocketPoint> socketsById = new Dictionary<string, SocketPoint>(StringComparer.OrdinalIgnoreCase);
+        if (stepRoot == null)
+            return socketsById;
+
+        foreach (SocketPoint socket in stepRoot.GetComponentsInChildren<SocketPoint>(true))
+        {
+            if (socket == null || string.IsNullOrWhiteSpace(socket.socketID))
+                continue;
+
+            if (!socketsById.ContainsKey(socket.socketID))
+                socketsById.Add(socket.socketID, socket);
+        }
+
+        return socketsById;
+    }
+
+    private static void RestorePlugConnection(
+        WirePlug plug,
+        string socketId,
+        Dictionary<string, SocketPoint> socketsById)
+    {
+        if (plug == null)
+            return;
+
+        if (plug.connectedSocket != null)
+            plug.connectedSocket.isOccupied = false;
+
+        plug.connectedSocket = null;
+        plug.isSnapped = false;
+
+        if (string.IsNullOrWhiteSpace(socketId) || !socketsById.TryGetValue(socketId, out SocketPoint socket))
+            return;
+
+        plug.connectedSocket = socket;
+        plug.isSnapped = true;
+        socket.isOccupied = true;
+        plug.transform.position = socket.transform.position;
+        plug.transform.rotation = socket.transform.rotation;
+    }
+
+    private static string GetConnectedSocketId(WirePlug plug)
+    {
+        if (plug == null || !plug.isSnapped || plug.connectedSocket == null)
+            return string.Empty;
+
+        return plug.connectedSocket.socketID;
     }
 
     private void UpdateStepNavigationBar()

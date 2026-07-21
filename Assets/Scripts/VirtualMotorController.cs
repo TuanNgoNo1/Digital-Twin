@@ -79,7 +79,8 @@ public class VirtualMotorController : MonoBehaviour
         // Tính góc quay mỗi frame: RPM -> degrees/sec = RPM * 6
         float degreesPerSecond = currentSpeed * 6f;
         float rotationThisFrame = degreesPerSecond * Time.deltaTime;
-        float direction = isForward ? 1f : -1f;
+        // Match virtual Rotor_Main direction with the real motor.
+        float direction = isForward ? -1f : 1f;
 
         // Quay model 3D
         if (motorRotor != null)

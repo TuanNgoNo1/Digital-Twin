@@ -280,7 +280,9 @@ public class PLCController_v2 : MonoBehaviour
         if (virtualMotorOwnsRotor || bladesOwnRotor)
             return;
 
-        float direction = visualDirectionForward ? 1f : -1f;
+        // Rotor_Main model faces opposite the real motor convention, so invert
+        // visual forward/reverse direction in the fallback rotation path too.
+        float direction = visualDirectionForward ? -1f : 1f;
         visualMotorRotor.Rotate(Vector3.forward, visualDegreesPerSecond * direction * Time.deltaTime, Space.Self);
     }
 
