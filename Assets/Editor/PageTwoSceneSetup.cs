@@ -5,7 +5,6 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-[InitializeOnLoad]
 public static class PageTwoSceneSetup
 {
     private static readonly string[] Labels =
@@ -18,20 +17,6 @@ public static class PageTwoSceneSetup
         "Dây cắm",
         "Bảng cắm dây"
     };
-
-    static PageTwoSceneSetup()
-    {
-        EditorApplication.delayCall += RunWhenStartSceneIsOpen;
-        EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
-    }
-
-    private static void OnPlayModeStateChanged(PlayModeStateChange state)
-    {
-        if (state == PlayModeStateChange.EnteredEditMode)
-        {
-            EditorApplication.delayCall += RunWhenStartSceneIsOpen;
-        }
-    }
 
     private static void RunWhenStartSceneIsOpen()
     {

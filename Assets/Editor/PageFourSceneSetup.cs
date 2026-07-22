@@ -5,21 +5,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-[InitializeOnLoad]
 public static class PageFourSceneSetup
 {
-    static PageFourSceneSetup()
-    {
-        EditorApplication.delayCall += SetupWhenPossible;
-        EditorApplication.playModeStateChanged += state =>
-        {
-            if (state == PlayModeStateChange.EnteredEditMode)
-            {
-                EditorApplication.delayCall += SetupWhenPossible;
-            }
-        };
-    }
-
     public static void Run()
     {
         Scene scene = EditorSceneManager.OpenScene("Assets/Scenes/StartScene.unity", OpenSceneMode.Single);

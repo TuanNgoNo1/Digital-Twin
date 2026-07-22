@@ -1,10 +1,13 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
 public class PageFourWiringTutorialController : MonoBehaviour
 {
+    private const int WireOverlayLayer = 31;
+
     [Header("Scene references")]
     [SerializeField] private Transform modelRoot;
     [SerializeField] private GameObject modelPrefab;
@@ -26,6 +29,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
     [SerializeField] private Vector2 socketBNormalized = new Vector2(0.716f, 0.322f);
 
     private Camera previewCamera;
+    private Camera wireOverlayCamera;
     private LineRenderer wireLine;
     private Transform plugA;
     private Transform plugB;
@@ -64,6 +68,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
         CreatePreviewCamera(boardBounds);
         ResolveSocketTargets(boardBounds);
         CreateDemoWire(boardBounds);
+        CreateWireOverlayCamera();
         playButton?.onClick.AddListener(PlayTutorial);
         ResetTutorial();
         previewCamera.enabled = gameObject.activeInHierarchy;
@@ -85,6 +90,10 @@ public class PageFourWiringTutorialController : MonoBehaviour
         {
             previewCamera.enabled = true;
         }
+        if (wireOverlayCamera != null)
+        {
+            wireOverlayCamera.enabled = true;
+        }
         if (visualRoot != null)
         {
             visualRoot.SetActive(true);
@@ -97,6 +106,10 @@ public class PageFourWiringTutorialController : MonoBehaviour
         {
             previewCamera.enabled = false;
         }
+        if (wireOverlayCamera != null)
+        {
+            wireOverlayCamera.enabled = false;
+        }
         if (visualRoot != null)
         {
             visualRoot.SetActive(false);
@@ -108,6 +121,10 @@ public class PageFourWiringTutorialController : MonoBehaviour
         if (previewCamera != null)
         {
             Destroy(previewCamera.gameObject);
+        }
+        if (wireOverlayCamera != null)
+        {
+            Destroy(wireOverlayCamera.gameObject);
         }
         if (visualRoot != null)
         {
@@ -123,7 +140,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
         cursorObject ??= content != null ? content.Find("CursorObject") as RectTransform : null;
         if (cursorObject != null)
         {
-            cursorObject.sizeDelta = new Vector2(36f, 36f);
+            cursorObject.sizeDelta = new Vector2(25.2f, 25.2f);
         }
         cursorLabel = cursorObject != null ? cursorObject.GetComponent<TextMeshProUGUI>() : null;
         cursorImage ??= cursorObject != null ? cursorObject.GetComponentInChildren<RawImage>(true) : null;
@@ -196,7 +213,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
             cursorObject = cursorImageObject.GetComponent<RectTransform>();
             cursorObject.anchorMin = new Vector2(0.5f, 0.5f);
             cursorObject.anchorMax = new Vector2(0.5f, 0.5f);
-            cursorObject.sizeDelta = new Vector2(36f, 36f);
+            cursorObject.sizeDelta = new Vector2(25.2f, 25.2f);
             cursorImage = cursorImageObject.GetComponent<RawImage>();
             cursorImage.texture = handIconsTexture;
             cursorImage.raycastTarget = false;
@@ -324,9 +341,9 @@ public class PageFourWiringTutorialController : MonoBehaviour
         GameObject cameraObject = new GameObject("PageFourPreviewCamera", typeof(Camera));
         previewCamera = cameraObject.GetComponent<Camera>();
         previewCamera.clearFlags = CameraClearFlags.SolidColor;
-        previewCamera.backgroundColor = new Color(0.94f, 0.96f, 0.98f, 1f);
+        previewCamera.backgroundColor = Color.white;
         previewCamera.fieldOfView = 36f;
-        previewCamera.rect = new Rect(0.18f, 0.15f, 0.64f, 0.72f);
+        previewCamera.rect = new Rect(0.18f, 0.123f, 0.64f, 0.72f);
         previewCamera.depth = Camera.main != null ? Camera.main.depth + 1f : 1f;
 
         FramePreviewCamera(bounds);
@@ -336,7 +353,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
         lightObject.transform.localRotation = Quaternion.Euler(28f, -30f, 0f);
         Light light = lightObject.GetComponent<Light>();
         light.type = LightType.Directional;
-        light.intensity = 0.55f;
+        light.intensity = 0.44f;
         light.shadows = LightShadows.None;
     }
 
@@ -393,11 +410,13 @@ public class PageFourWiringTutorialController : MonoBehaviour
         float wireLength = bounds.size.x * 0.38f;
         float y = bounds.center.y - bounds.size.y * 0.28f;
         float z = bounds.min.z - Mathf.Max(0.006f, bounds.size.z * 0.02f);
-        plugAStart = new Vector3(bounds.max.x + bounds.size.x * 0.05f, y, z);
-        plugBStart = plugAStart + Vector3.right * wireLength;
+        float originalLeftX = bounds.max.x + bounds.size.x * 0.05f;
+        plugAStart = new Vector3(bounds.max.x + bounds.size.x * 0.17f, y, z);
+        plugBStart = new Vector3(originalLeftX + wireLength, y, z);
 
         GameObject wire = new GameObject("TutorialWire", typeof(LineRenderer));
         wire.transform.SetParent(visualRoot.transform, true);
+        wire.layer = WireOverlayLayer;
         wireLine = wire.GetComponent<LineRenderer>();
         wireLine.useWorldSpace = true;
         wireLine.positionCount = 20;
@@ -408,6 +427,8 @@ public class PageFourWiringTutorialController : MonoBehaviour
         wireLine.sharedMaterial = wireMaterial;
         wireLine.startColor = Color.white;
         wireLine.endColor = Color.white;
+        wireLine.sortingOrder = 5000;
+        wire.AddComponent<WireLineAlwaysOnTop>();
 
         plugA = CreateJack("TutorialJackA", plugAStart, bounds.size.x * 0.085f, false);
         plugB = CreateJack("TutorialJackB", plugBStart, bounds.size.x * 0.085f, true);
@@ -415,11 +436,36 @@ public class PageFourWiringTutorialController : MonoBehaviour
         plugBStartRotation = plugB.rotation;
     }
 
+    private void CreateWireOverlayCamera()
+    {
+        int wireMask = 1 << WireOverlayLayer;
+        previewCamera.cullingMask &= ~wireMask;
+
+        foreach (Camera camera in FindObjectsByType<Camera>(FindObjectsSortMode.None))
+        {
+            camera.cullingMask &= ~wireMask;
+        }
+
+        GameObject cameraObject = new GameObject("PageFourWireOverlayCamera", typeof(Camera));
+        cameraObject.transform.SetParent(previewCamera.transform, false);
+        wireOverlayCamera = cameraObject.GetComponent<Camera>();
+        wireOverlayCamera.CopyFrom(previewCamera);
+        wireOverlayCamera.cullingMask = wireMask;
+
+        UniversalAdditionalCameraData previewCameraData = previewCamera.GetUniversalAdditionalCameraData();
+        UniversalAdditionalCameraData overlayCameraData = wireOverlayCamera.GetUniversalAdditionalCameraData();
+        previewCameraData.renderType = CameraRenderType.Base;
+        overlayCameraData.renderType = CameraRenderType.Overlay;
+        overlayCameraData.renderPostProcessing = false;
+        previewCameraData.cameraStack.Add(wireOverlayCamera);
+    }
+
     private Transform CreateJack(string name, Vector3 position, float targetLength, bool opposite)
     {
         GameObject jack = Instantiate(jack35Prefab);
         jack.name = name;
         jack.transform.SetParent(visualRoot.transform, true);
+        SetLayerRecursively(jack, WireOverlayLayer);
         jack.transform.position = position;
         jack.transform.rotation = opposite
             ? Quaternion.Euler(0f, 0f, -90f)
@@ -432,14 +478,27 @@ public class PageFourWiringTutorialController : MonoBehaviour
         }
         foreach (Renderer renderer in jack.GetComponentsInChildren<Renderer>(true))
         {
+            renderer.sortingOrder = 5000;
             Material[] materials = renderer.sharedMaterials;
             if (materials.Length > 0 && jackBodyMaterial != null)
             {
-                materials[0] = jackBodyMaterial;
+                for (int i = 0; i < materials.Length; i++)
+                {
+                    materials[i] = jackBodyMaterial;
+                }
                 renderer.sharedMaterials = materials;
             }
         }
         return jack.transform;
+    }
+
+    private static void SetLayerRecursively(GameObject root, int layer)
+    {
+        root.layer = layer;
+        foreach (Transform child in root.transform)
+        {
+            SetLayerRecursively(child.gameObject, layer);
+        }
     }
 
     private void UpdateWire()
@@ -524,6 +583,10 @@ public class PageFourWiringTutorialController : MonoBehaviour
         lastScreenWidth = Screen.width;
         lastScreenHeight = Screen.height;
         FramePreviewCamera(boardBounds);
+        if (wireOverlayCamera != null)
+        {
+            wireOverlayCamera.rect = previewCamera.rect;
+        }
         if (!isPlaying)
         {
             SetCursorFromWorld(cursorIdlePosition);

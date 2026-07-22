@@ -32,7 +32,6 @@ public class StartScreenController : MonoBehaviour
     {
         ResolveReferences();
         BuildNavigationButtons();
-        AddPageLabels();
         ShowPage(OpenGuidePageOnStart ? PageCount - 1 : 0);
         OpenGuidePageOnStart = false;
     }
@@ -100,6 +99,11 @@ public class StartScreenController : MonoBehaviour
 
         backgroundImage = background != null ? background.GetComponent<Image>() : null;
         sceneCamera = Camera.main;
+        if (sceneCamera == null)
+        {
+            GameObject cameraObject = GameObject.Find("Camera");
+            sceneCamera = cameraObject != null ? cameraObject.GetComponent<Camera>() : FindFirstObjectByType<Camera>();
+        }
         if (sceneCamera != null)
         {
             originalCameraClearFlags = sceneCamera.clearFlags;

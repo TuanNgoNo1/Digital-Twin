@@ -451,7 +451,7 @@ public class PageTwoPartsController : MonoBehaviour
         previewCamera.orthographic = false;
         previewCamera.fieldOfView = 34f;
         previewCamera.clearFlags = CameraClearFlags.SolidColor;
-        previewCamera.backgroundColor = new Color(0.94f, 0.96f, 0.98f, 1f);
+        previewCamera.backgroundColor = Color.white;
         previewCamera.nearClipPlane = 0.01f;
         previewCamera.farClipPlane = 5000f;
         previewCamera.transform.rotation = previewRotation;
@@ -465,7 +465,7 @@ public class PageTwoPartsController : MonoBehaviour
         Light previewLight = lightObject.GetComponent<Light>();
         previewLight.type = LightType.Directional;
         previewLight.color = new Color(1f, 0.96f, 0.9f, 1f);
-        previewLight.intensity = 0.78f;
+        previewLight.intensity = 0.62f;
         previewLight.shadows = LightShadows.None;
     }
 
