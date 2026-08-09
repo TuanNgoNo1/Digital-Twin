@@ -1751,7 +1751,7 @@ public class PLCController_v2 : MonoBehaviour
             canvasHmiPanelRect.anchorMin = new Vector2(1f, 1f);
             canvasHmiPanelRect.anchorMax = new Vector2(1f, 1f);
             canvasHmiPanelRect.pivot = new Vector2(1f, 1f);
-            canvasHmiPanelRect.anchoredPosition = new Vector2(-32f, -52f);
+            canvasHmiPanelRect.anchoredPosition = new Vector2(-32f, -150f);
         }
         else
         {

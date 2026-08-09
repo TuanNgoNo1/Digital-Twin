@@ -58,6 +58,15 @@ public class StartScreenController : MonoBehaviour
 
     public void PreviousPage()
     {
+        if (currentPageIndex == 1 && pages.Length > 1 && pages[1] != null)
+        {
+            PageTwoPartsController pageTwo = pages[1].GetComponent<PageTwoPartsController>();
+            if (pageTwo != null && pageTwo.TryShowPartList())
+            {
+                return;
+            }
+        }
+
         if (currentPageIndex <= 0)
         {
             return;
@@ -113,28 +122,36 @@ public class StartScreenController : MonoBehaviour
 
     private void BuildNavigationButtons()
     {
-        RectTransform parent = background != null ? background : transform as RectTransform;
+        RectTransform parent = transform as RectTransform;
         if (parent == null)
         {
             return;
         }
 
-        previousButton = CreateNavigationButton(parent, "PreviousButton", "\u2190", "Tr\u01b0\u1edbc", new Vector2(0f, 0f), new Vector2(40f, 40f));
-        nextButton = CreateNavigationButton(parent, "NextButton", "\u2192", "Sau", new Vector2(1f, 0f), new Vector2(-40f, 40f));
+        previousButton = CreateNavigationButton(parent, "PreviousButton", "\u2190", new Vector2(0f, 0f), new Vector2(44f, 22f));
+        nextButton = CreateNavigationButton(parent, "NextButton", "\u2192", new Vector2(1f, 0f), new Vector2(-44f, 22f));
 
         previousButton.onClick.AddListener(PreviousPage);
         nextButton.onClick.AddListener(NextPage);
     }
 
-    private Button CreateNavigationButton(RectTransform parent, string objectName, string arrow, string label, Vector2 anchor, Vector2 position)
+    private Button CreateNavigationButton(RectTransform parent, string objectName, string arrow, Vector2 anchor, Vector2 position)
     {
         GameObject existing = parent.Find(objectName)?.gameObject;
         if (existing != null)
         {
-            Destroy(existing);
+            existing.SetActive(false);
+            if (Application.isPlaying)
+            {
+                Destroy(existing);
+            }
+            else
+            {
+                DestroyImmediate(existing);
+            }
         }
 
-        GameObject buttonObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        GameObject buttonObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(Outline));
         buttonObject.transform.SetParent(parent, false);
         buttonObject.layer = parent.gameObject.layer;
 
@@ -143,21 +160,38 @@ public class StartScreenController : MonoBehaviour
         rect.anchorMax = anchor;
         rect.pivot = new Vector2(anchor.x, 0f);
         rect.anchoredPosition = position;
-        rect.sizeDelta = new Vector2(130f, 110f);
+        rect.sizeDelta = new Vector2(70f, 70f);
 
         Image image = buttonObject.GetComponent<Image>();
-        image.color = new Color(1f, 1f, 1f, 0.82f);
+        image.color = Color.white;
+        Sprite roundedRectangle = Resources.Load<Sprite>("UI/RoundedRect");
+        if (roundedRectangle == null)
+        {
+            roundedRectangle = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+        }
+        if (roundedRectangle != null)
+        {
+            image.sprite = roundedRectangle;
+            image.type = Image.Type.Sliced;
+        }
+
+        Outline outline = buttonObject.GetComponent<Outline>();
+        outline.effectColor = new Color32(218, 222, 226, 255);
+        outline.effectDistance = new Vector2(1f, -1f);
+        outline.useGraphicAlpha = false;
 
         Button button = buttonObject.GetComponent<Button>();
         ColorBlock colors = button.colors;
         colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(0.9f, 0.95f, 1f, 1f);
-        colors.pressedColor = new Color(0.78f, 0.86f, 0.95f, 1f);
-        colors.disabledColor = new Color(0.45f, 0.45f, 0.45f, 0.65f);
+        colors.highlightedColor = new Color32(246, 247, 248, 255);
+        colors.pressedColor = new Color32(232, 235, 238, 255);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color32(245, 245, 245, 180);
+        colors.colorMultiplier = 1f;
+        colors.fadeDuration = 0.08f;
         button.colors = colors;
 
-        CreateButtonText(buttonObject.transform, "Arrow", arrow, 48f, new Vector2(0f, 18f), FontStyles.Bold);
-        CreateButtonText(buttonObject.transform, "Label", label, 26f, new Vector2(0f, -28f), FontStyles.Bold);
+        CreateButtonText(buttonObject.transform, "Arrow", arrow, 34f, Vector2.zero, FontStyles.Normal);
 
         return button;
     }
@@ -179,7 +213,7 @@ public class StartScreenController : MonoBehaviour
         text.fontSize = fontSize;
         text.fontStyle = fontStyle;
         text.alignment = TextAlignmentOptions.Center;
-        text.color = Color.black;
+        text.color = new Color32(105, 117, 132, 255);
         text.raycastTarget = false;
     }
 
@@ -228,7 +262,7 @@ public class StartScreenController : MonoBehaviour
 
         if (previousButton != null)
         {
-            previousButton.interactable = currentPageIndex > 0;
+            previousButton.gameObject.SetActive(currentPageIndex > 0);
         }
 
         if (backgroundImage != null)
@@ -241,7 +275,13 @@ public class StartScreenController : MonoBehaviour
         {
             bool usesThreeDimensionalPreview = currentPageIndex == 1 || currentPageIndex == 3;
             sceneCamera.clearFlags = usesThreeDimensionalPreview ? CameraClearFlags.SolidColor : originalCameraClearFlags;
-            sceneCamera.backgroundColor = usesThreeDimensionalPreview ? Color.white : originalCameraBackground;
+            PageTwoPartsController pageTwo = currentPageIndex == 1 && pages.Length > 1 && pages[1] != null
+                ? pages[1].GetComponent<PageTwoPartsController>()
+                : null;
+            sceneCamera.backgroundColor = currentPageIndex == 1
+                ? pageTwo != null && pageTwo.IsShowingDetails ? Color.white : new Color32(247, 247, 247, 255)
+                : currentPageIndex == 3 ? new Color32(247, 247, 247, 255)
+                : usesThreeDimensionalPreview ? Color.white : originalCameraBackground;
         }
     }
 

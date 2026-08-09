@@ -3,10 +3,6 @@ using UnityEngine.InputSystem;
 
 public class WirePlug : MonoBehaviour
 {
-    // Every plug reads the same mouse state in Update. Only one plug may own
-    // the current pointer drag when multiple plug colliders overlap a socket.
-    private static WirePlug activePointerDrag;
-
     [Header("=== CAMERA ĐIỀU KHIỂN ===")]
     public Camera mainCam;
 
@@ -22,23 +18,14 @@ public class WirePlug : MonoBehaviour
     private Vector3 dragOffset;
     private SocketPoint nearestSocket;
     private Plane boardPlane;
-
-    private void OnDisable()
-    {
-        ReleasePointerDragOwnership();
-        isDragging = false;
-        ClearHighlight();
-    }
-
-    private void OnDestroy()
-    {
-        ReleasePointerDragOwnership();
-    }
+    private Collider myCollider;
 
     void Start()
     {
         if (mainCam == null) mainCam = Camera.main;
         if (mainCam == null) mainCam = FindFirstObjectByType<Camera>();
+
+        myCollider = GetComponent<Collider>();
 
         // Tự động tìm dây cha nếu chưa gán
         if (parentWire == null)
@@ -79,11 +66,18 @@ public class WirePlug : MonoBehaviour
         }
 
         // Kiểm tra Hover
+        bool isHovering = false;
         RaycastHit[] hits = Physics.RaycastAll(ray);
-        WirePlug pointerTarget = FindPointerTarget(hits);
-        bool isHovering = pointerTarget == this;
+        foreach (RaycastHit hit in hits)
+        {
+            if (hit.collider == myCollider)
+            {
+                isHovering = true;
+                break;
+            }
+        }
 
-        if (leftClickDown && isHovering && TryAcquirePointerDragOwnership())
+        if (leftClickDown && isHovering)
         {
             if (isSnapped) Unsnap();
             isDragging = true;
@@ -111,54 +105,12 @@ public class WirePlug : MonoBehaviour
         if (leftClickUp && isDragging)
         {
             isDragging = false;
-            ReleasePointerDragOwnership();
             Debug.Log($"[WirePlug {name}] Thả chuột. NearestSocket: {(nearestSocket != null ? nearestSocket.socketID : "NULL")}");
             if (nearestSocket != null) 
                 SnapTo(nearestSocket);
             else 
                 ClearHighlight();
         }
-    }
-
-    private static WirePlug FindPointerTarget(RaycastHit[] hits)
-    {
-        WirePlug best = null;
-        float bestDistance = float.PositiveInfinity;
-
-        foreach (RaycastHit hit in hits)
-        {
-            WirePlug candidate = hit.collider != null
-                ? hit.collider.GetComponentInParent<WirePlug>()
-                : null;
-            if (candidate == null || !candidate.isActiveAndEnabled)
-                continue;
-
-            bool isCloser = hit.distance < bestDistance - 0.0001f;
-            bool isTieWithLowerId = Mathf.Abs(hit.distance - bestDistance) <= 0.0001f
-                && (best == null || candidate.GetInstanceID() < best.GetInstanceID());
-            if (!isCloser && !isTieWithLowerId)
-                continue;
-
-            best = candidate;
-            bestDistance = hit.distance;
-        }
-
-        return best;
-    }
-
-    private bool TryAcquirePointerDragOwnership()
-    {
-        if (activePointerDrag != null && activePointerDrag != this)
-            return false;
-
-        activePointerDrag = this;
-        return true;
-    }
-
-    private void ReleasePointerDragOwnership()
-    {
-        if (activePointerDrag == this)
-            activePointerDrag = null;
     }
 
     Vector3 GetMousePosition()

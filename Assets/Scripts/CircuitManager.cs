@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -13,6 +14,13 @@ public class CircuitManager : MonoBehaviour
     private const int WireLayoutSlotCount = 6;
     private const string StartSceneName = "StartScene";
     private const string CompletionCheatCode = "6394";
+    private static readonly string[] PracticalNavigationLabels =
+    {
+        "1. \u0110\u1EA5u n\u1ED1i m\u1EA1ch \u0111i\u1EC1u khi\u1EC3n \u0111\u1ED9ng c\u01A1",
+        "2. \u0110\u1EA5u n\u1ED1i encoder",
+        "\u0110\u1EA5u n\u1ED1i m\u1EA1ch l\u1EF1c",
+        "4. V\u1EADn h\u00E0nh"
+    };
     private static readonly string[] NavigationStepTitles = { "Bước 1", "Bước 2", "Bước 3", "Bước 4" };
     private static readonly string[] NavigationStepDescriptions =
     {
@@ -53,6 +61,11 @@ public class CircuitManager : MonoBehaviour
     public Vector2 stepNavigationButtonSize = new Vector2(172f, 82f);
     public Vector2 stepNavigationMargin = new Vector2(24f, 24f);
 
+    [Header("Bo cuc thuc hanh dang the")]
+    public bool createPracticalWorkspaceLayout = true;
+    public float practicalCameraVerticalFov = 68f;
+    public Vector2 practicalCameraOffset = new Vector2(0.044f, -0.062f);
+
     [Header("Camera responsive khong crop hai ben")]
     public bool preserveWideCameraFraming = true;
     public float cameraDesignAspect = 2.25f;
@@ -83,6 +96,8 @@ public class CircuitManager : MonoBehaviour
     private GameObject stepResultPopupRoot;
     private GameObject stepNavigationRoot;
     private GameObject guideReturnRoot;
+    private GameObject practicalWorkspaceRoot;
+    private GameObject practicalWorkspaceMaskRoot;
     private RectTransform stepNavigationPanelRect;
     private RectTransform guideReturnButtonRect;
     private readonly List<Button> stepNavigationButtons = new List<Button>();
@@ -91,8 +106,14 @@ public class CircuitManager : MonoBehaviour
     private TextMeshProUGUI popupIconText;
     private TextMeshProUGUI popupStatusText;
     private TextMeshProUGUI popupMessageText;
+    private TextMeshProUGUI popupButtonText;
+    private TextMeshProUGUI practicalInstructionText;
+    private TextMeshProUGUI practicalWireGuideText;
+    private readonly List<GameObject> practicalWireRows = new List<GameObject>();
+    private readonly List<TextMeshProUGUI> practicalWireRowNumbers = new List<TextMeshProUGUI>();
+    private readonly List<Image> practicalWireRowBackgrounds = new List<Image>();
+    private readonly List<Image> popupCheckGraphics = new List<Image>();
     private Image popupIconBackground;
-    private Image popupAccent;
     private BoardStepHeading boardStepHeading;
     private static Sprite roundedRectangleSprite;
     private static Sprite socketLabelBackgroundSprite;
@@ -161,11 +182,13 @@ public class CircuitManager : MonoBehaviour
         }
 
         DisableLegacyObjects();
+        MoveCoveredSocketLabelsAwayFromWires();
         EnsureSocketLabelBackgrounds();
         CreateStepResultPopup();
         CreateStepNavigationBar();
         CreateGuideReturnButton();
         EnsureResponsiveCameraFraming();
+        CreatePracticalWorkspaceLayout();
         EnsureBoardStepHeading();
 
         if (arrangeWireHeadsOnStart)
@@ -211,13 +234,33 @@ public class CircuitManager : MonoBehaviour
         if (framing == null)
             framing = mainCamera.gameObject.AddComponent<ResponsiveCameraFraming>();
 
-        framing.designAspect = cameraDesignAspect;
-        framing.designVerticalFov = cameraDesignVerticalFov;
+        framing.designAspect = createPracticalWorkspaceLayout
+            ? 16f / 9f
+            : cameraDesignAspect;
+        framing.designVerticalFov = createPracticalWorkspaceLayout
+            ? practicalCameraVerticalFov
+            : cameraDesignVerticalFov;
+
+        if (createPracticalWorkspaceLayout)
+        {
+            mainCamera.transform.position +=
+                mainCamera.transform.right * practicalCameraOffset.x +
+                mainCamera.transform.up * practicalCameraOffset.y;
+        }
+
         framing.ApplyFraming();
     }
 
     private void EnsureBoardStepHeading()
     {
+        if (createPracticalWorkspaceLayout)
+        {
+            BoardStepHeading existingHeading = FindFirstObjectByType<BoardStepHeading>(FindObjectsInactive.Include);
+            if (existingHeading != null)
+                existingHeading.gameObject.SetActive(false);
+            return;
+        }
+
         if (!createBoardStepHeading)
             return;
 
@@ -339,6 +382,7 @@ public class CircuitManager : MonoBehaviour
         {
             completedWires = totalWires;
             visibleStepIndex = HmiStepIndex;
+            SaveWireConnections();
             ShowAllCompletedWires();
             UnlockSystem();
             UpdateStepNavigationBar();
@@ -372,6 +416,7 @@ public class CircuitManager : MonoBehaviour
 
         UpdateStepSocketFocus(visibleStepIndex);
         UpdateGuideReturnButton();
+        UpdatePracticalWorkspaceLayout();
     }
 
     private void ShowAllCompletedWires()
@@ -397,6 +442,7 @@ public class CircuitManager : MonoBehaviour
 
         ClearStepSocketFocus();
         UpdateGuideReturnButton();
+        UpdatePracticalWorkspaceLayout();
 
         Debug.Log("[Circuit] Da hien lai day ket noi cua ca ba buoc.");
     }
@@ -472,6 +518,7 @@ public class CircuitManager : MonoBehaviour
             if (!systemUnlocked)
                 return;
 
+            SaveWireConnections();
             visibleStepIndex = HmiStepIndex;
             ShowAllCompletedWires();
             OpenHmiScene();
@@ -481,8 +528,11 @@ public class CircuitManager : MonoBehaviour
             return;
         }
 
+        bool returningFromHmi = visibleStepIndex == HmiStepIndex;
         CloseHmiScene();
         visibleStepIndex = stepIndex;
+        if (returningFromHmi)
+            RestoreWireConnections();
         ShowOnlyStep(visibleStepIndex);
         UpdateStepNavigationBar();
         UpdateGuideReturnButton();
@@ -594,6 +644,9 @@ public class CircuitManager : MonoBehaviour
         if (wires.Count == 0)
             return;
 
+        if (createPracticalWorkspaceLayout && ArrangeStepInWireCard(wires))
+            return;
+
         int slotCount = Mathf.Max(WireLayoutSlotCount, wires.Count);
         float firstY = layoutCenter.y + rowSpacing * (slotCount - 1) * 0.5f;
         float leftX = layoutCenter.x - wireDisplayLength * 0.5f;
@@ -607,6 +660,60 @@ public class CircuitManager : MonoBehaviour
             PreparePlugForLayout(wire.plugA, new Vector3(leftX, y, layoutCenter.z), wire);
             PreparePlugForLayout(wire.plugB, new Vector3(rightX, y, layoutCenter.z), wire);
         }
+    }
+
+    private bool ArrangeStepInWireCard(List<WireBody> wires)
+    {
+        Camera mainCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        if (mainCamera == null || Screen.width <= 0 || Screen.height <= 0)
+            return false;
+
+        Plane wirePlane = new Plane(Vector3.forward, new Vector3(0f, 0f, layoutCenter.z));
+        const float rowCenterX = 0.892f;
+        const float plugHalfSpacing = 0.033f;
+        const float firstRowFromTop = 0.288f;
+        const float rowSpacingFromTop = 0.103f;
+
+        for (int i = 0; i < wires.Count; i++)
+        {
+            float rowY = 1f - firstRowFromTop - i * rowSpacingFromTop;
+            Vector3 leftScreen = new Vector3(
+                Screen.width * (rowCenterX - plugHalfSpacing),
+                Screen.height * rowY,
+                0f);
+            Vector3 rightScreen = new Vector3(
+                Screen.width * (rowCenterX + plugHalfSpacing),
+                Screen.height * rowY,
+                0f);
+
+            if (!TryScreenPointOnWirePlane(mainCamera, wirePlane, leftScreen, out Vector3 leftPosition) ||
+                !TryScreenPointOnWirePlane(mainCamera, wirePlane, rightScreen, out Vector3 rightPosition))
+            {
+                return false;
+            }
+
+            PreparePlugForLayout(wires[i].plugA, leftPosition, wires[i]);
+            PreparePlugForLayout(wires[i].plugB, rightPosition, wires[i]);
+        }
+
+        return true;
+    }
+
+    private static bool TryScreenPointOnWirePlane(
+        Camera camera,
+        Plane plane,
+        Vector3 screenPoint,
+        out Vector3 worldPoint)
+    {
+        Ray ray = camera.ScreenPointToRay(screenPoint);
+        if (plane.Raycast(ray, out float distance))
+        {
+            worldPoint = ray.GetPoint(distance);
+            return true;
+        }
+
+        worldPoint = Vector3.zero;
+        return false;
     }
 
     private static void PreparePlugForLayout(WirePlug plug, Vector3 position, WireBody parentWire)
@@ -653,22 +760,22 @@ public class CircuitManager : MonoBehaviour
         }
 
         pendingStepCompletion = false;
-        popupIconBackground.color = new Color(1f, 0.69f, 0.08f, 1f);
-        popupAccent.color = new Color(1f, 0.69f, 0.08f, 1f);
-        popupIconText.text = "!";
-        popupStatusText.color = new Color(0.82f, 0.42f, 0.02f, 1f);
-
         string wireNumbers = string.Join(", ", wrongWires.Select(GetWireDisplayName));
-        popupStatusText.text = $"{wireNumbers} chưa được cắm đúng";
 
-        string expectedConnections = string.Join(
-            "\n",
-            wrongWires.Select(wire =>
-                $"{GetWireDisplayName(wire)}: {wire.correctSocketA} - {wire.correctSocketB}"));
-
-        popupMessageText.text =
-            "Vui lòng kiểm tra và cắm lại theo hướng dẫn:\n\n" +
-            expectedConnections;
+        Color errorColor = new Color(0.78f, 0.08f, 0.1f, 1f);
+        popupIconBackground.color = errorColor;
+        popupIconText.text = "!";
+        popupIconText.color = errorColor;
+        popupIconText.gameObject.SetActive(true);
+        foreach (Image checkGraphic in popupCheckGraphics)
+            checkGraphic.gameObject.SetActive(false);
+        popupStatusText.color = new Color(0.24f, 0.27f, 0.34f, 1f);
+        popupStatusText.fontStyle = FontStyles.Normal;
+        popupStatusText.text =
+            "Gi\u1EAFc c\u1EAFm ch\u01B0a \u0111\u00FAng. Vui l\u00F2ng c\u1EAFm l\u1EA1i theo h\u01B0\u1EDBng d\u1EABn.";
+        popupMessageText.color = errorColor;
+        popupMessageText.text = "D\u00E2y c\u1EAFm sai: " + wireNumbers;
+        popupButtonText.text = "Th\u1EED l\u1EA1i";
 
         ShowPopup();
         Debug.LogWarning($"[Circuit] Buoc {currentStepIndex + 1} co day sai: {wireNumbers}.");
@@ -683,23 +790,29 @@ public class CircuitManager : MonoBehaviour
         }
 
         pendingStepCompletion = true;
-        popupIconBackground.color = new Color(0.12f, 0.68f, 0.38f, 1f);
-        popupAccent.color = new Color(0.12f, 0.68f, 0.38f, 1f);
-        popupIconText.text = "OK";
-        popupStatusText.color = new Color(0.06f, 0.5f, 0.25f, 1f);
-        popupStatusText.text = $"Đã hoàn thành Bước {currentStepIndex + 1}";
-
-        string stepName = GetStepDisplayName(currentStepIndex);
-        bool isFinalStep = currentStepIndex == stepRoots.Count - 1;
-        popupMessageText.text = isFinalStep
-            ? $"Bạn đã nối đúng toàn bộ dây của {stepName}.\n\nNhấn OK để mở màn hình HMI."
-            : $"Bạn đã nối đúng toàn bộ dây của {stepName}.\n\nNhấn OK để chuyển sang Bước {currentStepIndex + 2}.";
-
         ShowPopup();
     }
 
     private void ShowPopup()
     {
+        if (pendingStepCompletion)
+        {
+            Color successColor = new Color(0.08f, 0.67f, 0.04f, 1f);
+            popupIconBackground.color = successColor;
+            popupIconText.gameObject.SetActive(false);
+            foreach (Image checkGraphic in popupCheckGraphics)
+            {
+                checkGraphic.color = successColor;
+                checkGraphic.gameObject.SetActive(true);
+            }
+            popupStatusText.color = new Color(0.24f, 0.27f, 0.34f, 1f);
+            popupStatusText.fontStyle = FontStyles.Normal;
+            popupStatusText.text =
+                $"B\u1EA1n \u0111\u00E3 ho\u00E0n th\u00E0nh b\u01B0\u1EDBc {currentStepIndex + 1}.";
+            popupMessageText.text = string.Empty;
+            popupButtonText.text = "Ti\u1EBFp t\u1EE5c";
+        }
+
         popupVisible = true;
         stepResultPopupRoot.SetActive(true);
     }
@@ -738,21 +851,6 @@ public class CircuitManager : MonoBehaviour
         }
 
         return $"Dây {source}";
-    }
-
-    private static string GetStepDisplayName(int stepIndex)
-    {
-        switch (stepIndex)
-        {
-            case 0:
-                return "mạch điều khiển động cơ";
-            case 1:
-                return "mạch phản hồi";
-            case 2:
-                return "mạch lực";
-            default:
-                return $"Bước {stepIndex + 1}";
-        }
     }
 
     private void AutoFindStepRoots()
@@ -811,6 +909,90 @@ public class CircuitManager : MonoBehaviour
             if (legacyObject != null)
                 legacyObject.SetActive(false);
         }
+    }
+
+    private void MoveCoveredSocketLabelsAwayFromWires()
+    {
+        Dictionary<string, SocketPoint> socketsById = new Dictionary<string, SocketPoint>(StringComparer.OrdinalIgnoreCase);
+        foreach (SocketPoint socket in Resources.FindObjectsOfTypeAll<SocketPoint>())
+        {
+            if (socket == null ||
+                !socket.gameObject.scene.IsValid() ||
+                string.IsNullOrWhiteSpace(socket.socketID) ||
+                socketsById.ContainsKey(socket.socketID.Trim()))
+            {
+                continue;
+            }
+
+            socketsById.Add(socket.socketID.Trim(), socket);
+        }
+
+        int movedCount = 0;
+        int stepCount = Mathf.Min(stepRoots.Count, guideRoots.Count);
+        for (int stepIndex = 0; stepIndex < stepCount; stepIndex++)
+        {
+            GameObject stepRoot = stepRoots[stepIndex];
+            GameObject guideRoot = guideRoots[stepIndex];
+            if (stepRoot == null || guideRoot == null)
+                continue;
+
+            TextMeshProUGUI[] labels = guideRoot.GetComponentsInChildren<TextMeshProUGUI>(true);
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                movedCount += MoveCoveredEndpointLabel(
+                    labels,
+                    socketsById,
+                    wire,
+                    "A",
+                    wire.correctSocketA,
+                    wire.correctSocketB);
+                movedCount += MoveCoveredEndpointLabel(
+                    labels,
+                    socketsById,
+                    wire,
+                    "B",
+                    wire.correctSocketB,
+                    wire.correctSocketA);
+            }
+        }
+
+        Debug.Log($"[Circuit] Da doi ben {movedCount} nhan socket bi day che.");
+    }
+
+    private static int MoveCoveredEndpointLabel(
+        IEnumerable<TextMeshProUGUI> labels,
+        IReadOnlyDictionary<string, SocketPoint> socketsById,
+        WireBody wire,
+        string endpoint,
+        string socketId,
+        string otherSocketId)
+    {
+        if (wire == null ||
+            string.IsNullOrWhiteSpace(socketId) ||
+            string.IsNullOrWhiteSpace(otherSocketId) ||
+            !socketsById.TryGetValue(socketId.Trim(), out SocketPoint socket) ||
+            !socketsById.TryGetValue(otherSocketId.Trim(), out SocketPoint otherSocket))
+        {
+            return 0;
+        }
+
+        string labelPrefix = $"Label_{wire.name}_{endpoint}_";
+        TextMeshProUGUI label = labels.FirstOrDefault(candidate =>
+            candidate != null && candidate.name.StartsWith(labelPrefix, StringComparison.Ordinal));
+        if (label == null)
+            return 0;
+
+        Vector2 socketPosition = socket.transform.position;
+        Vector2 labelOffset = (Vector2)label.transform.position - socketPosition;
+        Vector2 connectionDirection = (Vector2)otherSocket.transform.position - socketPosition;
+        float magnitudes = labelOffset.magnitude * connectionDirection.magnitude;
+        if (magnitudes <= Mathf.Epsilon || Vector2.Dot(labelOffset, connectionDirection) / magnitudes <= 0.2f)
+            return 0;
+
+        Vector2 oppositePosition = socketPosition - labelOffset;
+        Vector3 currentPosition = label.transform.position;
+        label.transform.position = new Vector3(oppositePosition.x, oppositePosition.y, currentPosition.z);
+        return 1;
     }
 
     private void EnsureSocketLabelBackgrounds()
@@ -898,6 +1080,10 @@ public class CircuitManager : MonoBehaviour
         if (!createStepResultPopup || stepResultPopupRoot != null)
             return;
 
+        Vector2 compactPopupSize = createPracticalWorkspaceLayout
+            ? new Vector2(900f, 320f)
+            : stepResultPopupSize;
+
         stepResultPopupRoot = new GameObject(
             "StepResultPopup_Canvas",
             typeof(RectTransform),
@@ -917,26 +1103,32 @@ public class CircuitManager : MonoBehaviour
         GameObject dimBackground = CreatePopupImage(
             stepResultPopupRoot.transform,
             "DimBackground",
-            new Color(0.02f, 0.04f, 0.08f, 0.68f));
+            new Color(0.02f, 0.03f, 0.05f, 0.32f));
         StretchRect(dimBackground.GetComponent<RectTransform>());
 
         GameObject shadow = CreatePopupImage(
             stepResultPopupRoot.transform,
             "CardShadow",
-            new Color(0f, 0f, 0f, 0.32f));
-        SetCenteredRect(shadow.GetComponent<RectTransform>(), stepResultPopupSize, new Vector2(10f, -12f));
+            new Color(0f, 0f, 0f, 0.18f));
+        Image shadowImage = shadow.GetComponent<Image>();
+        shadowImage.sprite = GetRoundedRectangleSprite();
+        shadowImage.type = Image.Type.Sliced;
+        SetCenteredRect(shadow.GetComponent<RectTransform>(), compactPopupSize, new Vector2(7f, -8f));
 
         GameObject card = CreatePopupImage(
             stepResultPopupRoot.transform,
             "Card",
-            new Color(0.985f, 0.99f, 1f, 1f));
-        SetCenteredRect(card.GetComponent<RectTransform>(), stepResultPopupSize, Vector2.zero);
+            Color.white);
+        Image cardImage = card.GetComponent<Image>();
+        cardImage.sprite = GetRoundedRectangleSprite();
+        cardImage.type = Image.Type.Sliced;
+        SetCenteredRect(card.GetComponent<RectTransform>(), compactPopupSize, Vector2.zero);
 
         GameObject accentObject = CreatePopupImage(
             card.transform,
             "TopAccent",
             new Color(1f, 0.69f, 0.08f, 1f));
-        popupAccent = accentObject.GetComponent<Image>();
+        accentObject.SetActive(false);
         RectTransform accentRect = accentObject.GetComponent<RectTransform>();
         accentRect.anchorMin = new Vector2(0f, 1f);
         accentRect.anchorMax = new Vector2(1f, 1f);
@@ -947,18 +1139,42 @@ public class CircuitManager : MonoBehaviour
         GameObject iconObject = CreatePopupImage(
             card.transform,
             "StatusIcon",
-            new Color(1f, 0.69f, 0.08f, 1f));
+            new Color(0.78f, 0.08f, 0.1f, 1f));
         popupIconBackground = iconObject.GetComponent<Image>();
-        SetCenteredRect(iconObject.GetComponent<RectTransform>(), new Vector2(54f, 54f), new Vector2(-245f, 160f));
+        popupIconBackground.sprite = GetRingSprite();
+        popupIconBackground.type = Image.Type.Simple;
+        popupIconBackground.raycastTarget = false;
+        SetCenteredRect(iconObject.GetComponent<RectTransform>(), new Vector2(70f, 70f), new Vector2(0f, 92f));
         popupIconText = CreatePopupText(
             iconObject.transform,
             "IconText",
             "!",
-            25f,
+            42f,
             FontStyles.Bold,
-            Color.white,
+            new Color(0.78f, 0.08f, 0.1f, 1f),
             TextAlignmentOptions.Center);
         StretchRect(popupIconText.rectTransform);
+
+        popupCheckGraphics.Clear();
+        popupCheckGraphics.Add(CreateIconImage(
+            iconObject.transform,
+            "CheckShort",
+            new Vector2(24f, 7f),
+            new Vector2(-10f, -3f),
+            -45f,
+            GetRoundedRectangleSprite()));
+        popupCheckGraphics.Add(CreateIconImage(
+            iconObject.transform,
+            "CheckLong",
+            new Vector2(39f, 7f),
+            new Vector2(8f, 1f),
+            45f,
+            GetRoundedRectangleSprite()));
+        foreach (Image checkGraphic in popupCheckGraphics)
+        {
+            checkGraphic.color = new Color(0.08f, 0.67f, 0.04f, 1f);
+            checkGraphic.gameObject.SetActive(false);
+        }
 
         TextMeshProUGUI title = CreatePopupText(
             card.transform,
@@ -969,84 +1185,502 @@ public class CircuitManager : MonoBehaviour
             new Color(0.09f, 0.13f, 0.21f, 1f),
             TextAlignmentOptions.Left);
         SetCenteredRect(title.rectTransform, new Vector2(460f, 54f), new Vector2(55f, 160f));
+        title.gameObject.SetActive(false);
 
         GameObject divider = CreatePopupImage(
             card.transform,
             "Divider",
             new Color(0.84f, 0.87f, 0.92f, 1f));
         SetCenteredRect(divider.GetComponent<RectTransform>(), new Vector2(540f, 2f), new Vector2(0f, 120f));
+        divider.SetActive(false);
 
         popupStatusText = CreatePopupText(
             card.transform,
             "Status",
             string.Empty,
-            25f,
-            FontStyles.Bold,
-            new Color(0.82f, 0.42f, 0.02f, 1f),
+            27f,
+            FontStyles.Normal,
+            new Color(0.24f, 0.27f, 0.34f, 1f),
             TextAlignmentOptions.Center);
         popupStatusText.enableAutoSizing = true;
-        popupStatusText.fontSizeMin = 18f;
-        popupStatusText.fontSizeMax = 25f;
-        SetCenteredRect(popupStatusText.rectTransform, new Vector2(540f, 70f), new Vector2(0f, 75f));
+        popupStatusText.fontSizeMin = 20f;
+        popupStatusText.fontSizeMax = 27f;
+        popupStatusText.enableWordWrapping = false;
+        SetCenteredRect(popupStatusText.rectTransform, new Vector2(820f, 52f), new Vector2(0f, 22f));
 
         popupMessageText = CreatePopupText(
             card.transform,
             "Message",
             string.Empty,
-            21f,
+            24f,
             FontStyles.Normal,
-            new Color(0.16f, 0.2f, 0.29f, 1f),
+            new Color(0.78f, 0.08f, 0.1f, 1f),
             TextAlignmentOptions.Center);
         popupMessageText.enableAutoSizing = true;
-        popupMessageText.fontSizeMin = 16f;
-        popupMessageText.fontSizeMax = 21f;
+        popupMessageText.fontSizeMin = 18f;
+        popupMessageText.fontSizeMax = 24f;
+        popupMessageText.enableWordWrapping = false;
         popupMessageText.overflowMode = TextOverflowModes.Overflow;
-        SetCenteredRect(popupMessageText.rectTransform, new Vector2(540f, 190f), new Vector2(0f, -30f));
+        SetCenteredRect(popupMessageText.rectTransform, new Vector2(800f, 44f), new Vector2(0f, -28f));
 
         GameObject buttonObject = CreatePopupImage(
             card.transform,
             "OK_Button",
-            new Color(0.04f, 0.39f, 0.92f, 1f));
-        SetCenteredRect(buttonObject.GetComponent<RectTransform>(), new Vector2(190f, 54f), new Vector2(0f, -170f));
+            new Color(0.74f, 0.07f, 0.09f, 1f));
+        Image buttonImage = buttonObject.GetComponent<Image>();
+        buttonImage.sprite = GetRoundedRectangleSprite();
+        buttonImage.type = Image.Type.Sliced;
+        SetCenteredRect(buttonObject.GetComponent<RectTransform>(), new Vector2(160f, 58f), new Vector2(0f, -108f));
 
         Button okButton = buttonObject.AddComponent<Button>();
         ColorBlock buttonColors = okButton.colors;
-        buttonColors.normalColor = new Color(0.04f, 0.39f, 0.92f, 1f);
-        buttonColors.highlightedColor = new Color(0.08f, 0.5f, 1f, 1f);
-        buttonColors.pressedColor = new Color(0.03f, 0.28f, 0.72f, 1f);
+        buttonColors.normalColor = new Color(0.74f, 0.07f, 0.09f, 1f);
+        buttonColors.highlightedColor = new Color(0.84f, 0.1f, 0.12f, 1f);
+        buttonColors.pressedColor = new Color(0.62f, 0.04f, 0.06f, 1f);
         buttonColors.selectedColor = buttonColors.normalColor;
         okButton.colors = buttonColors;
         okButton.onClick.AddListener(HandlePopupOk);
 
-        TextMeshProUGUI buttonText = CreatePopupText(
+        popupButtonText = CreatePopupText(
             buttonObject.transform,
             "Text",
-            "OK",
-            22f,
+            "Th\u1EED l\u1EA1i",
+            23f,
             FontStyles.Bold,
             Color.white,
             TextAlignmentOptions.Center);
-        StretchRect(buttonText.rectTransform);
+        StretchRect(popupButtonText.rectTransform);
 
         stepResultPopupRoot.SetActive(false);
+    }
+
+    private void CreatePracticalWorkspaceLayout()
+    {
+        if (!createPracticalWorkspaceLayout || practicalWorkspaceRoot != null)
+            return;
+
+        Camera mainCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        if (mainCamera == null)
+            return;
+
+        HideLegacyPracticalPanels();
+
+        practicalWorkspaceRoot = new GameObject(
+            "PracticalWorkspace_Canvas",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler));
+
+        Canvas workspaceCanvas = practicalWorkspaceRoot.GetComponent<Canvas>();
+        workspaceCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+        workspaceCanvas.worldCamera = mainCamera;
+        workspaceCanvas.planeDistance = Mathf.Max(mainCamera.nearClipPlane + 0.45f, 0.75f);
+        workspaceCanvas.sortingOrder = 100;
+
+        CanvasScaler workspaceScaler = practicalWorkspaceRoot.GetComponent<CanvasScaler>();
+        workspaceScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        workspaceScaler.referenceResolution = new Vector2(1920f, 1080f);
+        workspaceScaler.matchWidthOrHeight = 0.5f;
+
+        Color pageBackground = new Color(0.965f, 0.965f, 0.965f, 1f);
+        Color cardBorder = new Color(0.84f, 0.85f, 0.87f, 1f);
+        Color cardShadow = new Color(0.12f, 0.14f, 0.17f, 0.12f);
+        Color textColor = new Color(0.25f, 0.28f, 0.33f, 1f);
+        Color red = new Color(0.82f, 0.12f, 0.15f, 1f);
+
+        GameObject page = CreatePopupImage(
+            practicalWorkspaceRoot.transform,
+            "PageBackground",
+            pageBackground);
+        page.GetComponent<Image>().raycastTarget = false;
+        StretchRect(page.GetComponent<RectTransform>());
+
+        CreateWorkspaceCard(
+            practicalWorkspaceRoot.transform,
+            "ModelPanel",
+            new Vector2(525f, 144f),
+            new Vector2(942f, 804f),
+            cardBorder,
+            cardShadow);
+
+        GameObject guideCard = CreateWorkspaceCard(
+            practicalWorkspaceRoot.transform,
+            "GuideCard",
+            new Vector2(52f, 144f),
+            new Vector2(442f, 544f),
+            cardBorder,
+            cardShadow);
+
+        CreateDocumentIcon(guideCard.transform, new Vector2(44f, 43f), red);
+        TextMeshProUGUI guideHeading = CreatePopupText(
+            guideCard.transform,
+            "Heading",
+            "H\u01B0\u1EDBng d\u1EABn",
+            36f,
+            FontStyles.Bold,
+            new Color(0.16f, 0.17f, 0.19f, 1f),
+            TextAlignmentOptions.MidlineLeft);
+        SetTopLeftRect(guideHeading.rectTransform, new Vector2(300f, 58f), new Vector2(86f, 31f));
+
+        GameObject guideDivider = CreatePopupImage(
+            guideCard.transform,
+            "Divider",
+            new Color(0.87f, 0.88f, 0.9f, 1f));
+        guideDivider.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(guideDivider.GetComponent<RectTransform>(), new Vector2(354f, 2f), new Vector2(44f, 94f));
+
+        practicalInstructionText = CreatePopupText(
+            guideCard.transform,
+            "Instruction",
+            string.Empty,
+            29f,
+            FontStyles.Normal,
+            new Color(0.34f, 0.38f, 0.44f, 1f),
+            TextAlignmentOptions.TopLeft);
+        practicalInstructionText.enableWordWrapping = true;
+        practicalInstructionText.lineSpacing = 5f;
+        SetTopLeftRect(
+            practicalInstructionText.rectTransform,
+            new Vector2(354f, 130f),
+            new Vector2(44f, 122f));
+
+        practicalWireGuideText = CreatePopupText(
+            guideCard.transform,
+            "WireGuide",
+            string.Empty,
+            27f,
+            FontStyles.Normal,
+            textColor,
+            TextAlignmentOptions.TopLeft);
+        practicalWireGuideText.enableWordWrapping = false;
+        practicalWireGuideText.overflowMode = TextOverflowModes.Overflow;
+        practicalWireGuideText.lineSpacing = 10f;
+        SetTopLeftRect(
+            practicalWireGuideText.rectTransform,
+            new Vector2(342f, 250f),
+            new Vector2(58f, 283f));
+
+        GameObject wireCard = CreateWorkspaceCard(
+            practicalWorkspaceRoot.transform,
+            "WireCard",
+            new Vector2(1492f, 144f),
+            new Vector2(381f, 804f),
+            cardBorder,
+            cardShadow);
+
+        CreateWireIcon(wireCard.transform, new Vector2(44f, 47f), red);
+        TextMeshProUGUI wireHeading = CreatePopupText(
+            wireCard.transform,
+            "Heading",
+            "B\u1ED9 d\u00E2y",
+            36f,
+            FontStyles.Bold,
+            new Color(0.16f, 0.17f, 0.19f, 1f),
+            TextAlignmentOptions.MidlineLeft);
+        SetTopLeftRect(wireHeading.rectTransform, new Vector2(230f, 58f), new Vector2(86f, 31f));
+
+        GameObject wireDivider = CreatePopupImage(
+            wireCard.transform,
+            "Divider",
+            new Color(0.87f, 0.88f, 0.9f, 1f));
+        wireDivider.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(wireDivider.GetComponent<RectTransform>(), new Vector2(292f, 2f), new Vector2(44f, 94f));
+
+        practicalWireRows.Clear();
+        practicalWireRowNumbers.Clear();
+        practicalWireRowBackgrounds.Clear();
+        for (int i = 0; i < WireLayoutSlotCount; i++)
+        {
+            GameObject row = CreatePopupImage(
+                wireCard.transform,
+                $"WireRow_{i + 1}",
+                new Color(0.99f, 0.98f, 0.98f, 0.92f));
+            Image rowImage = row.GetComponent<Image>();
+            rowImage.sprite = GetRoundedRectangleSprite();
+            rowImage.type = Image.Type.Sliced;
+            rowImage.raycastTarget = false;
+            SetTopLeftRect(
+                row.GetComponent<RectTransform>(),
+                new Vector2(292f, 99f),
+                new Vector2(44f, 117f + i * 112f));
+
+            GameObject rowBorder = CreatePopupImage(
+                row.transform,
+                "Border",
+                new Color(0.86f, 0.87f, 0.89f, 1f));
+            Image rowBorderImage = rowBorder.GetComponent<Image>();
+            rowBorderImage.sprite = GetRoundedRectangleSprite();
+            rowBorderImage.type = Image.Type.Sliced;
+            rowBorderImage.raycastTarget = false;
+            StretchRect(rowBorder.GetComponent<RectTransform>());
+            rowBorder.transform.SetAsFirstSibling();
+
+            GameObject rowSurface = CreatePopupImage(
+                row.transform,
+                "Surface",
+                rowImage.color);
+            Image rowSurfaceImage = rowSurface.GetComponent<Image>();
+            rowSurfaceImage.sprite = GetRoundedRectangleSprite();
+            rowSurfaceImage.type = Image.Type.Sliced;
+            rowSurfaceImage.raycastTarget = false;
+            SetTopLeftRect(
+                rowSurface.GetComponent<RectTransform>(),
+                new Vector2(288f, 95f),
+                new Vector2(2f, 2f));
+
+            TextMeshProUGUI number = CreatePopupText(
+                row.transform,
+                "Number",
+                (i + 1).ToString(),
+                31f,
+                FontStyles.Normal,
+                new Color(0.4f, 0.43f, 0.48f, 1f),
+                TextAlignmentOptions.Center);
+            SetTopLeftRect(number.rectTransform, new Vector2(52f, 99f), new Vector2(10f, 0f));
+
+            practicalWireRows.Add(row);
+            practicalWireRowNumbers.Add(number);
+            practicalWireRowBackgrounds.Add(rowSurfaceImage);
+        }
+
+        CreatePracticalWorkspaceMasks(pageBackground);
+        UpdatePracticalWorkspaceLayout();
+    }
+
+    private GameObject CreateWorkspaceCard(
+        Transform parent,
+        string objectName,
+        Vector2 position,
+        Vector2 size,
+        Color borderColor,
+        Color shadowColor)
+    {
+        GameObject shadow = CreatePopupImage(parent, objectName + "_Shadow", shadowColor);
+        Image shadowImage = shadow.GetComponent<Image>();
+        shadowImage.sprite = GetRoundedRectangleSprite();
+        shadowImage.type = Image.Type.Sliced;
+        shadowImage.raycastTarget = false;
+        SetTopLeftRect(shadow.GetComponent<RectTransform>(), size, position + new Vector2(4f, 5f));
+
+        GameObject border = CreatePopupImage(parent, objectName + "_Border", borderColor);
+        Image borderImage = border.GetComponent<Image>();
+        borderImage.sprite = GetRoundedRectangleSprite();
+        borderImage.type = Image.Type.Sliced;
+        borderImage.raycastTarget = false;
+        SetTopLeftRect(border.GetComponent<RectTransform>(), size + new Vector2(4f, 4f), position - new Vector2(2f, 2f));
+
+        GameObject card = CreatePopupImage(parent, objectName, Color.white);
+        Image cardImage = card.GetComponent<Image>();
+        cardImage.sprite = GetRoundedRectangleSprite();
+        cardImage.type = Image.Type.Sliced;
+        cardImage.raycastTarget = false;
+        SetTopLeftRect(card.GetComponent<RectTransform>(), size, position);
+        return card;
+    }
+
+    private void CreatePracticalWorkspaceMasks(Color backgroundColor)
+    {
+        practicalWorkspaceMaskRoot = new GameObject(
+            "PracticalWorkspaceMasks_Canvas",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler));
+
+        Canvas maskCanvas = practicalWorkspaceMaskRoot.GetComponent<Canvas>();
+        maskCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        maskCanvas.sortingOrder = 4800;
+
+        CanvasScaler scaler = practicalWorkspaceMaskRoot.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        GameObject topMask = CreatePopupImage(practicalWorkspaceMaskRoot.transform, "TopMask", backgroundColor);
+        topMask.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(topMask.GetComponent<RectTransform>(), new Vector2(1920f, 144f), Vector2.zero);
+
+        GameObject bottomMask = CreatePopupImage(practicalWorkspaceMaskRoot.transform, "BottomMask", backgroundColor);
+        bottomMask.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(bottomMask.GetComponent<RectTransform>(), new Vector2(1920f, 132f), new Vector2(0f, 948f));
+    }
+
+    private void HideLegacyPracticalPanels()
+    {
+        foreach (string panelName in new[] { "bd-Photoroom", "bhd (1)" })
+        {
+            GameObject panel = GameObject.Find(panelName);
+            if (panel != null)
+                panel.SetActive(false);
+        }
+
+        foreach (GameObject guideRoot in guideRoots)
+        {
+            if (guideRoot == null)
+                continue;
+
+            Transform instructionPanel = guideRoot.transform.Find("InstructionPanel");
+            if (instructionPanel != null)
+                instructionPanel.gameObject.SetActive(false);
+        }
+
+        foreach (GameObject stepRoot in stepRoots)
+        {
+            if (stepRoot == null)
+                continue;
+
+            foreach (Transform child in stepRoot.GetComponentsInChildren<Transform>(true))
+            {
+                if (child.name.Equals("StepUI", StringComparison.OrdinalIgnoreCase))
+                    child.gameObject.SetActive(false);
+            }
+
+            foreach (TextMeshProUGUI label in stepRoot.GetComponentsInChildren<TextMeshProUGUI>(true))
+            {
+                if (label.name.StartsWith("D\u00E2y ", StringComparison.OrdinalIgnoreCase))
+                    label.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private static void CreateDocumentIcon(Transform parent, Vector2 position, Color color)
+    {
+        GameObject outline = CreatePopupImage(parent, "GuideIcon", color);
+        outline.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(outline.GetComponent<RectTransform>(), new Vector2(25f, 31f), position);
+
+        GameObject paper = CreatePopupImage(outline.transform, "Paper", Color.white);
+        paper.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(paper.GetComponent<RectTransform>(), new Vector2(19f, 25f), new Vector2(3f, 3f));
+
+        for (int i = 0; i < 2; i++)
+        {
+            GameObject line = CreatePopupImage(outline.transform, $"Line_{i + 1}", color);
+            line.GetComponent<Image>().raycastTarget = false;
+            SetTopLeftRect(line.GetComponent<RectTransform>(), new Vector2(11f, 2f), new Vector2(7f, 11f + i * 6f));
+        }
+    }
+
+    private static void CreateWireIcon(Transform parent, Vector2 position, Color color)
+    {
+        GameObject line = CreatePopupImage(parent, "WireIcon_Line", color);
+        line.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(line.GetComponent<RectTransform>(), new Vector2(27f, 3f), position + new Vector2(0f, 12f));
+
+        for (int i = 0; i < 2; i++)
+        {
+            GameObject plug = CreatePopupImage(parent, $"WireIcon_Plug_{i + 1}", color);
+            plug.GetComponent<Image>().raycastTarget = false;
+            SetTopLeftRect(
+                plug.GetComponent<RectTransform>(),
+                new Vector2(7f, 11f),
+                position + new Vector2(i == 0 ? -2f : 22f, 8f));
+        }
+    }
+
+    private void UpdatePracticalWorkspaceLayout()
+    {
+        bool showWorkspace = visibleStepIndex >= 0 && visibleStepIndex < HmiStepIndex;
+        if (practicalWorkspaceRoot != null)
+            practicalWorkspaceRoot.SetActive(showWorkspace);
+        if (practicalWorkspaceMaskRoot != null)
+            practicalWorkspaceMaskRoot.SetActive(showWorkspace);
+
+        if (!showWorkspace || practicalInstructionText == null || practicalWireGuideText == null)
+            return;
+
+        practicalInstructionText.text =
+            "K\u00E9o th\u1EA3 c\u00E1c \u0111\u1EA7u d\u00E2y n\u1ED1i\n" +
+            "v\u00E0o c\u00E1c gi\u1EAFc c\u1EAFm tr\u00EAn\n" +
+            "b\u1EA3ng \u0111i\u1EC1u khi\u1EC3n:";
+
+        List<WireBody> wires = visibleStepIndex < stepRoots.Count
+            ? GetStepWires(stepRoots[visibleStepIndex])
+            : new List<WireBody>();
+
+        practicalWireGuideText.text = string.Join(
+            "\n",
+            wires.Select(wire =>
+                $"<color=#{ColorUtility.ToHtmlStringRGB(GetPracticalGuideTextColor(wire))}>" +
+                $"\u2022 {GetWireDisplayName(wire)}: {wire.correctSocketA} \u2192 {wire.correctSocketB}</color>"));
+
+        for (int i = 0; i < practicalWireRows.Count; i++)
+        {
+            bool hasWire = i < wires.Count;
+            practicalWireRows[i].SetActive(hasWire);
+            if (!hasWire)
+                continue;
+
+            practicalWireRowNumbers[i].text = GetWireNumber(wires[i]).ToString();
+            practicalWireRowBackgrounds[i].color = GetWireRowColor(wires[i]);
+        }
+    }
+
+    private static int GetWireNumber(WireBody wire)
+    {
+        if (wire == null)
+            return 0;
+
+        string source = wire.name;
+        int markerIndex = source.IndexOf("Wire_", StringComparison.OrdinalIgnoreCase);
+        int start = markerIndex >= 0 ? markerIndex + 5 : 0;
+        int end = start;
+        while (end < source.Length && char.IsDigit(source[end]))
+            end++;
+
+        return end > start && int.TryParse(source.Substring(start, end - start), out int number)
+            ? number
+            : 0;
+    }
+
+    private static Color GetWireTextColor(WireBody wire)
+    {
+        WireColor color = wire != null && wire.plugA != null ? wire.plugA.wireColor : WireColor.Any;
+        switch (color)
+        {
+            case WireColor.Red:
+                return new Color(0.82f, 0.12f, 0.15f, 1f);
+            case WireColor.Yellow:
+                return new Color(0.86f, 0.58f, 0.03f, 1f);
+            case WireColor.Green:
+                return new Color(0.13f, 0.55f, 0.32f, 1f);
+            case WireColor.Blue:
+                return new Color(0.12f, 0.38f, 0.72f, 1f);
+            default:
+                return new Color(0.2f, 0.23f, 0.28f, 1f);
+        }
+    }
+
+    private Color GetPracticalGuideTextColor(WireBody wire)
+    {
+        int wireNumber = GetWireNumber(wire);
+        if (visibleStepIndex == 0 && wireNumber >= 1 && wireNumber <= 2)
+            return new Color(0.82f, 0.12f, 0.15f, 1f);
+
+        return GetWireTextColor(wire);
+    }
+
+    private static Color GetWireRowColor(WireBody wire)
+    {
+        WireColor color = wire != null && wire.plugA != null ? wire.plugA.wireColor : WireColor.Any;
+        switch (color)
+        {
+            case WireColor.Red:
+                return new Color(1f, 0.965f, 0.97f, 0.94f);
+            case WireColor.Yellow:
+                return new Color(1f, 0.99f, 0.94f, 0.94f);
+            case WireColor.Green:
+                return new Color(0.95f, 0.99f, 0.96f, 0.94f);
+            case WireColor.Blue:
+                return new Color(0.95f, 0.98f, 1f, 0.94f);
+            default:
+                return new Color(0.97f, 0.975f, 0.98f, 0.94f);
+        }
     }
 
     private void CreateStepNavigationBar()
     {
         if (!createStepNavigationBar || stepNavigationRoot != null)
             return;
-
-        const float horizontalPadding = 8f;
-        const float verticalPadding = 8f;
-        const float buttonSpacing = 10f;
-        Vector2 buttonSize = new Vector2(
-            Mathf.Max(stepNavigationButtonSize.x, 172f),
-            Mathf.Max(stepNavigationButtonSize.y, 82f));
-        float panelWidth =
-            horizontalPadding * 2f +
-            buttonSize.x * NavigationStepCount +
-            buttonSpacing * (NavigationStepCount - 1);
-        float panelHeight = verticalPadding * 2f + buttonSize.y;
 
         stepNavigationRoot = new GameObject(
             "StepNavigation_Canvas",
@@ -1070,35 +1704,45 @@ public class CircuitManager : MonoBehaviour
             Color.clear);
         panel.GetComponent<Image>().raycastTarget = false;
         stepNavigationPanelRect = panel.GetComponent<RectTransform>();
-        stepNavigationPanelRect.anchorMin = Vector2.zero;
-        stepNavigationPanelRect.anchorMax = Vector2.zero;
-        stepNavigationPanelRect.pivot = Vector2.zero;
-        stepNavigationPanelRect.anchoredPosition = stepNavigationMargin;
-        stepNavigationPanelRect.sizeDelta = new Vector2(panelWidth, panelHeight);
+        SetTopLeftRect(
+            stepNavigationPanelRect,
+            new Vector2(1823f, 69f),
+            new Vector2(50f, 52f));
+
+        GameObject connector = CreatePopupImage(
+            panel.transform,
+            "StepConnector",
+            new Color(0.72f, 0.76f, 0.81f, 1f));
+        connector.GetComponent<Image>().raycastTarget = false;
+        SetTopLeftRect(
+            connector.GetComponent<RectTransform>(),
+            new Vector2(1133f, 3f),
+            new Vector2(475f, 33f));
 
         stepNavigationButtons.Clear();
         stepNavigationItems.Clear();
 
+        float[] buttonX = { 0f, 662f, 1142f, 1608f };
+        float[] buttonWidth = { 475f, 293f, 279f, 215f };
+
         for (int i = 0; i < NavigationStepCount; i++)
         {
             int stepIndex = i;
-
-            Vector2 buttonPosition = new Vector2(
-                horizontalPadding + i * (buttonSize.x + buttonSpacing),
-                0f);
+            Vector2 buttonSize = new Vector2(buttonWidth[i], 69f);
+            Vector2 buttonPosition = new Vector2(buttonX[i], 0f);
 
             GameObject shadowObject = CreatePopupImage(
                 panel.transform,
                 $"Step_{i + 1}_Shadow",
-                new Color(0.06f, 0.09f, 0.16f, 0.16f));
+                new Color(0.12f, 0.15f, 0.2f, 0.12f));
             Image shadowImage = shadowObject.GetComponent<Image>();
             shadowImage.sprite = GetRoundedRectangleSprite();
             shadowImage.type = Image.Type.Sliced;
             shadowImage.raycastTarget = false;
-            SetLeftCenteredRect(
+            SetTopLeftRect(
                 shadowObject.GetComponent<RectTransform>(),
                 buttonSize,
-                buttonPosition + new Vector2(0f, -3f));
+                buttonPosition + new Vector2(0f, 4f));
 
             GameObject borderObject = CreatePopupImage(
                 panel.transform,
@@ -1108,10 +1752,10 @@ public class CircuitManager : MonoBehaviour
             borderImage.sprite = GetRoundedRectangleSprite();
             borderImage.type = Image.Type.Sliced;
             borderImage.raycastTarget = false;
-            SetLeftCenteredRect(
+            SetTopLeftRect(
                 borderObject.GetComponent<RectTransform>(),
-                buttonSize + new Vector2(2f, 2f),
-                buttonPosition + new Vector2(-1f, 0f));
+                buttonSize + new Vector2(4f, 4f),
+                buttonPosition + new Vector2(-2f, -2f));
 
             GameObject buttonObject = CreatePopupImage(
                 panel.transform,
@@ -1122,7 +1766,7 @@ public class CircuitManager : MonoBehaviour
             buttonImage.type = Image.Type.Sliced;
 
             RectTransform buttonRect = buttonObject.GetComponent<RectTransform>();
-            SetLeftCenteredRect(buttonRect, buttonSize, buttonPosition);
+            SetTopLeftRect(buttonRect, buttonSize, buttonPosition);
 
             Button button = buttonObject.AddComponent<Button>();
             button.targetGraphic = buttonImage;
@@ -1137,36 +1781,46 @@ public class CircuitManager : MonoBehaviour
                 Shadow = shadowImage
             };
 
-            item.IconGraphics.AddRange(CreateStepNavigationIcon(buttonObject.transform, i));
-
             TextMeshProUGUI title = CreatePopupText(
                 buttonObject.transform,
-                "Title",
-                NavigationStepTitles[i],
-                15f,
-                FontStyles.Bold,
+                "Label",
+                PracticalNavigationLabels[i],
+                25f,
+                FontStyles.Normal,
                 new Color(0.37f, 0.43f, 0.52f, 1f),
                 TextAlignmentOptions.Center);
             title.enableAutoSizing = true;
-            title.fontSizeMin = 14f;
-            title.fontSizeMax = 17f;
-            SetCenteredRect(title.rectTransform, new Vector2(122f, 24f), new Vector2(20f, 22f));
+            title.fontSizeMin = 18f;
+            title.fontSizeMax = 25f;
+            title.enableWordWrapping = false;
+            SetTopLeftRect(
+                title.rectTransform,
+                new Vector2(buttonSize.x - 24f, buttonSize.y),
+                new Vector2(12f, 0f));
             item.Title = title;
 
-            TextMeshProUGUI description = CreatePopupText(
-                buttonObject.transform,
-                "Description",
-                NavigationStepDescriptions[i],
-                13f,
-                FontStyles.Bold,
-                new Color(0.48f, 0.55f, 0.64f, 1f),
-                TextAlignmentOptions.Center);
-            description.enableAutoSizing = true;
-            description.enableWordWrapping = true;
-            description.fontSizeMin = 11f;
-            description.fontSizeMax = 14f;
-            SetCenteredRect(description.rectTransform, new Vector2(160f, 40f), new Vector2(0f, -16f));
-            item.Description = description;
+            EventTrigger hoverTrigger = buttonObject.AddComponent<EventTrigger>();
+            EventTrigger.Entry pointerEnter = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerEnter
+            };
+            pointerEnter.callback.AddListener(_ =>
+            {
+                if (!button.interactable)
+                    return;
+
+                borderImage.color = new Color(0.92f, 0.16f, 0.19f, 1f);
+                shadowImage.color = new Color(0.5f, 0.08f, 0.1f, 0.22f);
+                title.color = new Color(0.82f, 0.12f, 0.15f, 1f);
+            });
+            hoverTrigger.triggers.Add(pointerEnter);
+
+            EventTrigger.Entry pointerExit = new EventTrigger.Entry
+            {
+                eventID = EventTriggerType.PointerExit
+            };
+            pointerExit.callback.AddListener(_ => UpdateStepNavigationBar());
+            hoverTrigger.triggers.Add(pointerExit);
 
             stepNavigationItems.Add(item);
         }
@@ -1206,8 +1860,8 @@ public class CircuitManager : MonoBehaviour
         buttonRect.anchorMin = new Vector2(0f, 1f);
         buttonRect.anchorMax = new Vector2(0f, 1f);
         buttonRect.pivot = new Vector2(0f, 1f);
-        buttonRect.anchoredPosition = new Vector2(24f, -24f);
-        buttonRect.sizeDelta = new Vector2(210f, 58f);
+        buttonRect.anchoredPosition = new Vector2(52f, -992f);
+        buttonRect.sizeDelta = new Vector2(237f, 71f);
 
         Button button = buttonObject.AddComponent<Button>();
         button.targetGraphic = buttonImage;
@@ -1221,26 +1875,28 @@ public class CircuitManager : MonoBehaviour
         colors.selectedColor = colors.normalColor;
         button.colors = colors;
 
-        TextMeshProUGUI text = CreatePopupText(
+        TextMeshProUGUI buttonText = CreatePopupText(
             buttonObject.transform,
             "Label",
-            "V\u1ec1 h\u01b0\u1edbng d\u1eabn",
-            22f,
-            FontStyles.Bold,
-            new Color(0.11f, 0.18f, 0.29f, 1f),
+            "\u2190  H\u01B0\u1EDBng d\u1EABn",
+            23f,
+            FontStyles.Normal,
+            new Color(0.38f, 0.43f, 0.5f, 1f),
             TextAlignmentOptions.Center);
-        text.enableAutoSizing = true;
-        text.fontSizeMin = 15f;
-        text.fontSizeMax = 22f;
-        SetCenteredRect(text.rectTransform, new Vector2(190f, 42f), Vector2.zero);
+        buttonText.enableAutoSizing = true;
+        buttonText.fontSizeMin = 17f;
+        buttonText.fontSizeMax = 23f;
+        SetCenteredRect(buttonText.rectTransform, new Vector2(213f, 55f), Vector2.zero);
 
         UpdateGuideReturnButton();
     }
 
     private void UpdateGuideReturnButton()
     {
-        if (guideReturnRoot != null)
-            guideReturnRoot.SetActive(visibleStepIndex >= 0 && visibleStepIndex < HmiStepIndex);
+        if (guideReturnRoot == null)
+            return;
+
+        guideReturnRoot.SetActive(visibleStepIndex >= 0 && visibleStepIndex < HmiStepIndex);
     }
 
     private void ReturnToGuidePage()
@@ -1324,6 +1980,7 @@ public class CircuitManager : MonoBehaviour
         if (savedWireConnections.Count == 0)
             return;
 
+        Dictionary<string, SocketPoint> socketsById = FindSocketsById();
         for (int stepIndex = 0; stepIndex < stepRoots.Count; stepIndex++)
         {
             GameObject stepRoot = stepRoots[stepIndex];
@@ -1334,7 +1991,6 @@ public class CircuitManager : MonoBehaviour
                 .Where(saved => saved.StepIndex == stepIndex)
                 .GroupBy(saved => saved.WireName)
                 .ToDictionary(group => group.Key, group => group.First());
-            Dictionary<string, SocketPoint> socketsById = FindSocketsById(stepRoot);
 
             foreach (WireBody wire in GetStepWires(stepRoot))
             {
@@ -1348,16 +2004,17 @@ public class CircuitManager : MonoBehaviour
         }
     }
 
-    private static Dictionary<string, SocketPoint> FindSocketsById(GameObject stepRoot)
+    private static Dictionary<string, SocketPoint> FindSocketsById()
     {
         Dictionary<string, SocketPoint> socketsById = new Dictionary<string, SocketPoint>(StringComparer.OrdinalIgnoreCase);
-        if (stepRoot == null)
-            return socketsById;
-
-        foreach (SocketPoint socket in stepRoot.GetComponentsInChildren<SocketPoint>(true))
+        foreach (SocketPoint socket in Resources.FindObjectsOfTypeAll<SocketPoint>())
         {
-            if (socket == null || string.IsNullOrWhiteSpace(socket.socketID))
+            if (socket == null ||
+                !socket.gameObject.scene.IsValid() ||
+                string.IsNullOrWhiteSpace(socket.socketID))
+            {
                 continue;
+            }
 
             if (!socketsById.ContainsKey(socket.socketID))
                 socketsById.Add(socket.socketID, socket);
@@ -1404,17 +2061,17 @@ public class CircuitManager : MonoBehaviour
             stepNavigationItems.Count != NavigationStepCount)
             return;
 
-        Color selectedBackground = new Color(0.04f, 0.39f, 0.92f, 1f);
+        Color selectedBackground = Color.white;
         Color normalBackground = new Color(1f, 1f, 1f, 1f);
-        Color lockedBackground = new Color(0.96f, 0.97f, 0.99f, 1f);
-        Color selectedText = Color.white;
-        Color normalTitle = new Color(0.36f, 0.42f, 0.51f, 1f);
+        Color lockedBackground = new Color(0.99f, 0.99f, 0.99f, 1f);
+        Color selectedText = new Color(0.82f, 0.12f, 0.15f, 1f);
+        Color normalTitle = new Color(0.38f, 0.41f, 0.46f, 1f);
         Color normalDescription = new Color(0.5f, 0.57f, 0.66f, 1f);
-        Color lockedText = new Color(0.58f, 0.64f, 0.72f, 1f);
-        Color normalBorder = new Color(0.84f, 0.87f, 0.92f, 1f);
-        Color selectedBorder = new Color(0.04f, 0.39f, 0.92f, 1f);
-        Color lockedBorder = new Color(0.88f, 0.9f, 0.94f, 1f);
-        Color shadowColor = new Color(0.06f, 0.09f, 0.16f, 0.16f);
+        Color lockedText = new Color(0.48f, 0.51f, 0.56f, 1f);
+        Color normalBorder = new Color(0.84f, 0.86f, 0.89f, 1f);
+        Color selectedBorder = new Color(0.9f, 0.12f, 0.16f, 1f);
+        Color lockedBorder = new Color(0.88f, 0.89f, 0.91f, 1f);
+        Color shadowColor = new Color(0.12f, 0.15f, 0.2f, 0.1f);
 
         for (int i = 0; i < stepNavigationButtons.Count; i++)
         {
@@ -1432,11 +2089,11 @@ public class CircuitManager : MonoBehaviour
             ColorBlock colors = button.colors;
             colors.normalColor = backgroundColor;
             colors.highlightedColor = isSelected
-                ? LightenColor(selectedBackground, 0.08f)
-                : new Color(0.94f, 0.97f, 1f, 1f);
+                ? new Color(1f, 0.91f, 0.92f, 1f)
+                : new Color(1f, 0.94f, 0.95f, 1f);
             colors.pressedColor = isSelected
-                ? DarkenColor(selectedBackground, 0.12f)
-                : new Color(0.89f, 0.93f, 0.98f, 1f);
+                ? new Color(1f, 0.93f, 0.93f, 1f)
+                : new Color(0.93f, 0.95f, 0.97f, 1f);
             colors.selectedColor = backgroundColor;
             colors.disabledColor = lockedBackground;
             colors.colorMultiplier = 1f;
@@ -1458,7 +2115,7 @@ public class CircuitManager : MonoBehaviour
 
             if (item.Shadow != null)
                 item.Shadow.color = isSelected
-                    ? new Color(0.04f, 0.25f, 0.55f, 0.24f)
+                    ? new Color(0.5f, 0.08f, 0.1f, 0.14f)
                     : shadowColor;
 
             Color titleColor = !isUnlocked
@@ -1605,6 +2262,15 @@ public class CircuitManager : MonoBehaviour
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = Vector2.zero;
         rect.sizeDelta = Vector2.zero;
+    }
+
+    private static void SetTopLeftRect(RectTransform rect, Vector2 size, Vector2 position)
+    {
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(position.x, -position.y);
+        rect.sizeDelta = size;
     }
 
     private static void SetCenteredRect(RectTransform rect, Vector2 size, Vector2 position)

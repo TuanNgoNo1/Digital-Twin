@@ -203,7 +203,7 @@ MonoBehaviour:
   mainCam: {fileID: 0}
   wireColor: 2
   snapDistance: 0.18
-  preferredSocketID:
+  preferredSocketID: X1
   isSnapped: 0
   connectedSocket: {fileID: 0}
   parentWire: {fileID: 3933861222883823861}
@@ -307,7 +307,7 @@ MonoBehaviour:
   mainCam: {fileID: 0}
   wireColor: 2
   snapDistance: 0.18
-  preferredSocketID:
+  preferredSocketID: X1
   isSnapped: 0
   connectedSocket: {fileID: 0}
   parentWire: {fileID: 3933861222883823861}

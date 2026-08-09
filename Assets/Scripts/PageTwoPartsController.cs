@@ -6,6 +6,9 @@ using UnityEngine.UI;
 
 public class PageTwoPartsController : MonoBehaviour
 {
+    private static readonly Vector2 SelectedLabelPosition = new Vector2(84f, -76f);
+    private static readonly Vector2 DescriptionPosition = new Vector2(58f, -145f);
+
     private sealed class PartEntry
     {
         public string Label;
@@ -31,13 +34,13 @@ public class PageTwoPartsController : MonoBehaviour
 
     private readonly string[] partDescriptions =
     {
-        "Trung tâm điều khiển; nhận dữ liệu từ HMI, tính toán tần số/số xung, phát xung qua Y0 và điều khiển hướng qua Y1. PLC cũng đọc tín hiệu Encoder qua bộ đếm tốc độ cao.",
-        "Giao diện nhập tốc độ, vị trí/góc quay, chọn chiều quay, START/STOP/RESET và hiển thị trạng thái vận hành theo thời gian thực.",
-        "Động cơ đồng bộ ba pha kích từ bằng nam châm vĩnh cửu, gồm roto và stato, được tích hợp hệ thống cảm biến Hall.",
-        "Tạo xung phản hồi pha A/B để PLC xác định tốc độ, chiều quay và vị trí thực tế của trục động cơ.",
-        "Aptomat và cầu chì bảo vệ hệ thống khỏi quá dòng, ngắn mạch.",
-        "Phục vụ việc đấu nối, có 3 màu đỏ, vàng và đen.",
-        "Bảng với các lỗ cắm phục vụ cho việc đấu nối mạch điện. Dùng các dây cắm để đấu nối 2 lỗ cắm với nhau."
+        "• Trung tâm điều khiển\n• Nhận dữ liệu từ HMI\n• Tính toán tần số/số xung, phát xung qua Y0 và điều hướng qua Y1\n• Đọc tín hiệu Encoder qua bộ đếm tốc độ cao",
+        "• Giao diện nhập tốc độ và vị trí/góc quay\n• Chọn chiều quay\n• Điều khiển START/STOP/RESET\n• Hiển thị trạng thái vận hành theo thời gian thực",
+        "• Động cơ đồng bộ ba pha\n• Kích từ bằng nam châm vĩnh cửu\n• Gồm roto và stato\n• Tích hợp hệ thống cảm biến Hall",
+        "• Tạo xung phản hồi pha A/B\n• Xác định tốc độ và chiều quay\n• Phản hồi vị trí thực tế của trục động cơ",
+        "• Bảo vệ hệ thống khỏi quá dòng\n• Ngắt mạch khi xảy ra ngắn mạch\n• Cô lập nguồn khi kiểm tra và đấu nối",
+        "• Phục vụ đấu nối giữa các điểm trên mô hình\n• Gồm ba màu đỏ, vàng và đen\n• Giúp phân biệt các nhóm mạch điện",
+        "• Cung cấp các lỗ cắm cho mạch điện\n• Kết nối hai điểm bằng dây cắm\n• Hỗ trợ thay đổi và kiểm tra sơ đồ đấu nối"
     };
 
     [SerializeField] private float animationDuration = 0.55f;
@@ -59,6 +62,12 @@ public class PageTwoPartsController : MonoBehaviour
 
     private RectTransform selectedLabelRect;
     private RectTransform descriptionRect;
+    private GameObject pageHeader;
+    private GameObject pageTitle;
+    private GameObject pageTitleIcon;
+    private GameObject detailIcon;
+    private GameObject detailDivider;
+    private Camera sceneCamera;
     private Bounds fullModelBounds;
     private Coroutine transition;
     private Vector3 cameraStartPosition;
@@ -76,9 +85,12 @@ public class PageTwoPartsController : MonoBehaviour
     private float orbitYaw = -12f;
     private float orbitPitch = 8f;
     private bool isOrbiting;
+    private bool isShowingDetails;
     private Bounds activeViewBounds;
     private int lastScreenWidth;
     private int lastScreenHeight;
+
+    public bool IsShowingDetails => isShowingDetails;
 
     private void Awake()
     {
@@ -188,6 +200,12 @@ public class PageTwoPartsController : MonoBehaviour
         }
         selectedLabelRect = selectedLabel != null ? selectedLabel.rectTransform : null;
         descriptionRect = descriptionText != null ? descriptionText.rectTransform : null;
+        pageHeader = content.Find("PageTwoHeader")?.gameObject;
+        pageTitle = content.Find("PageTwoTitle")?.gameObject;
+        pageTitleIcon = content.Find("PageTwoTitleIcon")?.gameObject;
+        detailIcon = content.Find("DetailPartIcon")?.gameObject;
+        detailDivider = content.Find("DetailDivider")?.gameObject;
+        sceneCamera = Camera.main;
     }
 
     private void BindInterfaceEvents()
@@ -339,20 +357,15 @@ public class PageTwoPartsController : MonoBehaviour
             descriptionText.text = partDescriptions[index];
             descriptionText.gameObject.SetActive(true);
         }
-        Vector3 worldStart = sourceButton.TransformPoint(sourceButton.rect.center);
-        Vector2 localStart;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(transform as RectTransform, RectTransformUtility.WorldToScreenPoint(null, worldStart), null, out localStart);
-        localStart.x += (transform as RectTransform).rect.width * 0.5f;
-        selectedLabelRect.anchoredPosition = localStart;
-        selectedLabelRect.localScale = Vector3.one * 0.82f;
+        selectedLabelRect.anchoredPosition = SelectedLabelPosition;
+        selectedLabelRect.localScale = Vector3.one;
         if (descriptionRect != null)
         {
-            descriptionRect.anchoredPosition = localStart + new Vector2(0f, -72f);
-            descriptionRect.localScale = Vector3.one * 0.82f;
+            descriptionRect.anchoredPosition = DescriptionPosition;
+            descriptionRect.localScale = Vector3.one;
         }
 
-        buttonList.gameObject.SetActive(false);
-        listButton.gameObject.SetActive(true);
+        SetDetailMode(true);
         Bounds targetBounds = CalculateBounds(targets);
         if (index != 5)
         {
@@ -368,7 +381,7 @@ public class PageTwoPartsController : MonoBehaviour
         {
             StopCoroutine(transition);
         }
-        transition = StartCoroutine(AnimateSelection(new Vector2(145f, 170f)));
+        transition = StartCoroutine(AnimateSelection(SelectedLabelPosition));
     }
 
     private IEnumerator AnimateSelection(Vector2 labelTarget)
@@ -386,7 +399,7 @@ public class PageTwoPartsController : MonoBehaviour
             selectedLabelRect.localScale = Vector3.Lerp(scaleStart, Vector3.one, t);
             if (descriptionRect != null)
             {
-                descriptionRect.anchoredPosition = Vector2.Lerp(descriptionStart, new Vector2(145f, 92f), t);
+                descriptionRect.anchoredPosition = Vector2.Lerp(descriptionStart, DescriptionPosition, t);
                 descriptionRect.localScale = Vector3.Lerp(descriptionScaleStart, Vector3.one, t);
             }
             previewCamera.transform.position = Vector3.Lerp(cameraStartPosition, cameraTargetPosition, t);
@@ -408,11 +421,46 @@ public class PageTwoPartsController : MonoBehaviour
         {
             descriptionText.gameObject.SetActive(false);
         }
-        listButton.gameObject.SetActive(false);
-        buttonList.gameObject.SetActive(true);
+        SetDetailMode(false);
         ClearHighlight();
         SetCameraTarget(fullModelBounds, 1.18f);
         transition = StartCoroutine(AnimateCameraOnly());
+    }
+
+    public bool TryShowPartList()
+    {
+        if (!isShowingDetails)
+        {
+            return false;
+        }
+
+        ShowPartList();
+        return true;
+    }
+
+    private void SetDetailMode(bool showDetails)
+    {
+        isShowingDetails = showDetails;
+        buttonList?.gameObject.SetActive(!showDetails);
+        listButton?.gameObject.SetActive(false);
+        pageHeader?.SetActive(!showDetails);
+        pageTitle?.SetActive(!showDetails);
+        pageTitleIcon?.SetActive(!showDetails);
+        detailIcon?.SetActive(showDetails);
+        detailDivider?.SetActive(showDetails);
+
+        if (previewCamera != null)
+        {
+            previewCamera.rect = showDetails
+                ? new Rect(0.603f, 0.05f, 0.374f, 0.89f)
+                : new Rect(0.463f, 0.153f, 0.378f, 0.668f);
+        }
+
+        if (sceneCamera != null)
+        {
+            sceneCamera.clearFlags = CameraClearFlags.SolidColor;
+            sceneCamera.backgroundColor = showDetails ? Color.white : new Color32(247, 247, 247, 255);
+        }
     }
 
     private IEnumerator AnimateCameraOnly()
@@ -455,7 +503,7 @@ public class PageTwoPartsController : MonoBehaviour
         previewCamera.nearClipPlane = 0.01f;
         previewCamera.farClipPlane = 5000f;
         previewCamera.transform.rotation = previewRotation;
-        previewCamera.rect = new Rect(0.49f, 0.14f, 0.42f, 0.68f);
+        previewCamera.rect = new Rect(0.463f, 0.153f, 0.378f, 0.668f);
         Camera mainCamera = Camera.main;
         previewCamera.depth = mainCamera != null ? mainCamera.depth + 1f : 1f;
 

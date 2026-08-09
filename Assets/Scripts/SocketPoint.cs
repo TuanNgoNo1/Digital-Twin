@@ -3,10 +3,10 @@ using UnityEngine;
 
 public class SocketPoint : MonoBehaviour
 {
-    private const float GuideFocusScale = 1.1f;
+    private const float GuideFocusScale = 1.2f;
     private const int GuideFocusSegments = 32;
-    private const float GuideFocusRingRadius = 0.3f;
-    private const float GuideFocusRingWorldWidth = 0.0008f;
+    private const float GuideFocusRingRadius = 0.4f;
+    private const float GuideFocusRingWorldWidth = 0.0022f;
 
     public string socketID;
     public WireColor acceptColor = WireColor.Any;
@@ -85,7 +85,7 @@ public class SocketPoint : MonoBehaviour
         ring.alignment = LineAlignment.View;
         ring.sortingOrder = 4500;
         ring.material = GetGuideFocusRingMaterial();
-        Color ringColor = new Color(1f, 0.96f, 0.78f, 0.75f);
+        Color ringColor = new Color(1f, 0.82f, 0f, 1f);
         ring.startColor = ringColor;
         ring.endColor = ringColor;
 
