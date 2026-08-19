@@ -1,13 +1,14 @@
-# Track only the minimal Unity project structure.
+# This repository contains only the portable Unity project.
 /*
 !/.gitignore
-!/.vscode/
+!/README.md
 !/Assets/
 !/Packages/
 !/ProjectSettings/
 !/chats/
 
-# Unity generated files and local machine state.
+
+# Unity-generated state and build output.
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -15,22 +16,14 @@
 /[Bb]uilds/
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
 /.vs/
+/.vscode/
+/.idea/
 /.utmp/
 
-# Local tools, exports, and build artifacts.
-/.claude/
-/Tools/
-/_pdf_extract_demo/
-/build-*/
-/webgl-scorm/
-*.zip
-*.log
-
-# Unity/editor generated files that should not be committed.
-/Assets/_Recovery.meta
-/Assets/_Recovery/
-/Assets/Plugins/Editor/JetBrains*
+# Editor and IDE files.
 *.csproj
 *.unityproj
 *.sln
@@ -49,8 +42,20 @@
 sysinfo.txt
 mono_crash.*
 
-# Unity build/package outputs.
+# Local recovery data and generated caches inside Assets.
+/Assets/_Recovery/
+/Assets/_Recovery.meta
+/Assets/__MergeRecovery/
+/Assets/__MergeRecovery.meta
+/Assets/Plugins/Editor/JetBrains*
+__pycache__/
+*.pyc
+*.log
+
+# Build and package artifacts.
 *.apk
 *.aab
-*.unitypackage
 *.app
+*.unitypackage
+*.zip
+

@@ -5,24 +5,45 @@ using UnityEngine.Networking;
 
 public class MjpegStreamer : MonoBehaviour
 {
+    private const string DefaultStreamUrl =
+        "http://103.238.69.131:8080/cam/snapshot.jpg";
+
     [Header("Cấu hình kết nối")]
-    public string streamUrl = "http://192.168.137.67:8080/?action=stream";
+    public string streamUrl = DefaultStreamUrl;
     public RawImage displayImage;
 
     void Start()
     {
+        if (
+            string.IsNullOrWhiteSpace(streamUrl)
+            || streamUrl.IndexOf(
+                "unacquiescent-quiana-excepable.ngrok-free.dev",
+                System.StringComparison.OrdinalIgnoreCase
+            ) >= 0
+        )
+        {
+            streamUrl = DefaultStreamUrl;
+        }
+
         if (displayImage == null) displayImage = GetComponent<RawImage>();
         StartCoroutine(GetStream());
     }
 
     IEnumerator GetStream()
     {
-        // Chuyển sang url snapshot để lấy từng ảnh đơn lẻ
+        // Hỗ trợ cả URL cũ action=stream và URL snapshot trực tiếp.
         string snapshotUrl = streamUrl.Replace("action=stream", "action=snapshot");
 
         while (true)
         {
-            using (UnityWebRequest uwr = UnityWebRequestTexture.GetTexture(snapshotUrl))
+            string separator = snapshotUrl.Contains("?") ? "&" : "?";
+            string requestUrl =
+                snapshotUrl
+                + separator
+                + "t="
+                + System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            using (UnityWebRequest uwr = UnityWebRequestTexture.GetTexture(requestUrl))
             {
                 uwr.SetRequestHeader("ngrok-skip-browser-warning", "true");
                 // Gửi yêu cầu lấy ảnh
@@ -47,8 +68,8 @@ public class MjpegStreamer : MonoBehaviour
                     displayImage.texture = tex;
                 }
             }
-            // Tốc độ 20-25 fps là vừa đẹp cho Mobile Hotspot
-            yield return new WaitForSeconds(0.05f);
+            // Nguồn camera hiện phát 5 FPS.
+            yield return new WaitForSeconds(0.2f);
         }
     }
 }

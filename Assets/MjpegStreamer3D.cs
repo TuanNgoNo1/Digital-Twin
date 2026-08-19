@@ -4,16 +4,32 @@ using UnityEngine.Networking;
 
 public class MjpegStreamer3D : MonoBehaviour
 {
-    [Header("Cấu hình kết nối Pi")]
-    public string streamUrl = "http://10.38.100.214:8080/?action=stream";
+    private const string DefaultStreamUrl =
+        "http://103.238.69.131:8080/cam/snapshot.jpg";
+
+    [Header("Cấu hình kết nối camera")]
+    public string streamUrl = DefaultStreamUrl;
 
     [Header("Tốc độ làm mới (giây)")]
-    public float updateInterval = 0.05f;
+    public float updateInterval = 0.2f;
 
     private Renderer screenRenderer;
 
     void Start()
     {
+        if (
+            string.IsNullOrWhiteSpace(streamUrl)
+            || streamUrl.IndexOf(
+                "unacquiescent-quiana-excepable.ngrok-free.dev",
+                System.StringComparison.OrdinalIgnoreCase
+            ) >= 0
+        )
+        {
+            streamUrl = DefaultStreamUrl;
+        }
+
+        updateInterval = Mathf.Max(0.2f, updateInterval);
+
         // Tự động lấy Renderer của vật thể (Plane/Quad/Cube)
         screenRenderer = GetComponent<Renderer>();
 
@@ -28,12 +44,19 @@ public class MjpegStreamer3D : MonoBehaviour
 
     IEnumerator GetStream()
     {
-        // Chuyển đổi sang URL snapshot để Unity xử lý mượt hơn
+        // Hỗ trợ cả URL cũ action=stream và URL snapshot trực tiếp.
         string snapshotUrl = streamUrl.Replace("action=stream", "action=snapshot");
 
         while (true)
         {
-            using (UnityWebRequest uwr = UnityWebRequestTexture.GetTexture(snapshotUrl))
+            string separator = snapshotUrl.Contains("?") ? "&" : "?";
+            string requestUrl =
+                snapshotUrl
+                + separator
+                + "t="
+                + System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            using (UnityWebRequest uwr = UnityWebRequestTexture.GetTexture(requestUrl))
             {
                 uwr.SetRequestHeader("ngrok-skip-browser-warning", "true");
                 yield return uwr.SendWebRequest();

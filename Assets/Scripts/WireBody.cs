@@ -79,9 +79,6 @@ public class WireBody : MonoBehaviour
 
         Vector3 p0 = plugA.transform.position;
         Vector3 p3 = plugB.transform.position;
-        if (p0 == lastP0 && p3 == lastP3)
-            return;
-
         lastP0 = p0;
         lastP3 = p3;
         UpdateLinePositions();
@@ -127,7 +124,17 @@ public class WireBody : MonoBehaviour
     public void CheckConnection()
     {
         bool previousCorrect = wasCorrect;
-        RefreshConnectionState(logResult: true);
+        RefreshConnectionState();
+
+        if (isFullyConnected)
+        {
+            string actual = GetSocketSummary();
+            string expected = $"{correctSocketA}-{correctSocketB}";
+            if (isCorrect)
+                Debug.Log($"<color=green>✓ ĐÚNG: {name} → {actual}</color>");
+            else
+                Debug.LogWarning($"<color=red>✗ SAI SOCKET: {name} → {actual} (đúng: {expected})</color>");
+        }
 
         if (isCorrect && !previousCorrect)
         {
