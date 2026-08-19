@@ -1,13 +1,3 @@
-# This repository contains only the portable Unity project.
-/*
-!/.gitignore
-!/README.md
-!/Assets/
-!/Packages/
-!/ProjectSettings/
-!/chats/
-
-
 # Unity-generated state and build output.
 /[Ll]ibrary/
 /[Tt]emp/
@@ -19,16 +9,15 @@
 /[Mm]emoryCaptures/
 /[Rr]ecordings/
 /.vs/
-/.vscode/
 /.idea/
 /.utmp/
+/.gradle/
 
 # Editor and IDE files.
 *.csproj
 *.unityproj
 *.sln
 *.suo
-*.tmp
 *.user
 *.userprefs
 *.pidb
@@ -42,20 +31,52 @@
 sysinfo.txt
 mono_crash.*
 
-# Local recovery data and generated caches inside Assets.
-/Assets/_Recovery/
-/Assets/_Recovery.meta
-/Assets/__MergeRecovery/
-/Assets/__MergeRecovery.meta
-/Assets/Plugins/Editor/JetBrains*
-__pycache__/
-*.pyc
-*.log
-
 # Build and package artifacts.
 *.apk
 *.aab
 *.app
 *.unitypackage
 *.zip
+build-*/
+webgl-scorm/
+
+# Local recovery data and generated caches inside Assets.
+/Assets/_Recovery/
+/Assets/_Recovery.meta
+/Assets/__MergeRecovery/
+/Assets/__MergeRecovery.meta
+/Assets/Plugins/Editor/JetBrains*
+
+# Virtual environments, cache & logs.
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.log
+
+# Browser profiles and temporary staging.
+.codex_stage/
+.agents/
+edge-profile*/
+**/edge-profile*
+
+# Large installers / binaries (>50MB).
+*.exe
+*.iso
+
+# Local backup files.
+*.bak*
+
+# Camera test snapshots and live worker feeds.
+cam_snapshot_probe.jpg
+cam_test.jpg
+test_cam1.jpg
+test_cam2.jpg
+camera_www/**/*.jpg
+camera_www/**/*.json
+camera_www/*.jpg
+camera_www/*.json
+
+
 
