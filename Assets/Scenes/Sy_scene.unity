@@ -3344,7 +3344,7 @@ GameObject:
   - component: {fileID: 395010897}
   - component: {fileID: 395010896}
   m_Layer: 0
-  m_Name: Guide_Wire_08_Enc_A-X4
+  m_Name: Guide_Wire_08_Enc_A-X3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3389,7 +3389,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "D\xE2y 8: Enc_A - X4"
+  m_text: "D\xE2y 8: Enc_A - X3"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -5555,7 +5555,7 @@ GameObject:
   - component: {fileID: 728062963}
   - component: {fileID: 728062962}
   m_Layer: 0
-  m_Name: Guide_Wire_15_oC-Motor_A
+  m_Name: Guide_Wire_15_oC-Motor_C
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -5600,7 +5600,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "D\xE2y 15: oC - Motor_A"
+  m_text: "D\xE2y 15: oC - Motor_C"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -6352,7 +6352,7 @@ GameObject:
   - component: {fileID: 831822022}
   - component: {fileID: 831822021}
   m_Layer: 0
-  m_Name: Guide_Wire_11_Pin15-X1
+  m_Name: Guide_Wire_11_Pin15-X0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -6397,7 +6397,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "D\xE2y 11: Pin15 - X1"
+  m_text: "D\xE2y 11: Pin15 - X0"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -7183,7 +7183,7 @@ GameObject:
   - component: {fileID: 979279281}
   - component: {fileID: 979279280}
   m_Layer: 0
-  m_Name: Guide_Wire_10_Pin13-X0
+  m_Name: Guide_Wire_10_Pin13-X1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -7228,7 +7228,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "D\xE2y 10: Pin13 - X0"
+  m_text: "D\xE2y 10: Pin13 - X1"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -8196,7 +8196,7 @@ GameObject:
   - component: {fileID: 1069037961}
   - component: {fileID: 1069037960}
   m_Layer: 0
-  m_Name: Guide_Wire_13_oA-Motor_S
+  m_Name: Guide_Wire_13_oA-Motor_A
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -8241,7 +8241,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "D\xE2y 13: oA - Motor_S"
+  m_text: "D\xE2y 13: oA - Motor_A"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -14664,7 +14664,7 @@ GameObject:
   - component: {fileID: 1779336019}
   - component: {fileID: 1779336018}
   m_Layer: 0
-  m_Name: Motor_A
+  m_Name: Motor_C
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -14718,7 +14718,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 350199df3167f884cb91c3466664f774, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SocketPoint
-  socketID: Motor_A
+  socketID: Motor_C
   acceptColor: 3
   isOccupied: 0
   highlightMat: {fileID: 0}
@@ -17270,7 +17270,7 @@ GameObject:
   - component: {fileID: 1887653417}
   - component: {fileID: 1887653416}
   m_Layer: 0
-  m_Name: Motor_S
+  m_Name: Motor_A
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -17324,7 +17324,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 350199df3167f884cb91c3466664f774, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SocketPoint
-  socketID: Motor_S
+  socketID: Motor_A
   acceptColor: 1
   isOccupied: 0
   highlightMat: {fileID: 0}
@@ -18608,7 +18608,7 @@ GameObject:
   - component: {fileID: 2068609248}
   - component: {fileID: 2068609247}
   m_Layer: 0
-  m_Name: Guide_Wire_09_Enc_B-X3
+  m_Name: Guide_Wire_09_Enc_B-X4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -18653,7 +18653,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "D\xE2y 9: Enc_B - X3"
+  m_text: "D\xE2y 9: Enc_B - X4"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -20272,7 +20272,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 930740968352623859, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: correctSocketB
-      value: Motor_A
+      value: Motor_C
       objectReference: {fileID: 0}
     - target: {fileID: 945805061363763178, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: sagAmount
@@ -20436,7 +20436,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 4257024834087967348, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: correctSocketB
-      value: Motor_S
+      value: Motor_A
       objectReference: {fileID: 0}
     - target: {fileID: 4264854643778303019, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: m_LocalPosition.x
@@ -20692,7 +20692,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5734784499198630115, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: m_Name
-      value: Wire_15_oC-Motor_A
+      value: Wire_15_oC-Motor_C
       objectReference: {fileID: 0}
     - target: {fileID: 5918262460502938018, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: m_Name
@@ -20868,7 +20868,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7389884000804076202, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: m_Name
-      value: Wire_13_oA-Motor_S
+      value: Wire_13_oA-Motor_A
       objectReference: {fileID: 0}
     - target: {fileID: 7389884000804076202, guid: 2861058d522e471478b3058cd5ad3ca1, type: 3}
       propertyPath: m_IsActive

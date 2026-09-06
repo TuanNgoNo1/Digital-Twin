@@ -3,10 +3,10 @@ using UnityEngine;
 
 public class SocketPoint : MonoBehaviour
 {
-    private const float GuideFocusScale = 1.2f;
-    private const int GuideFocusSegments = 32;
-    private const float GuideFocusRingRadius = 0.4f;
-    private const float GuideFocusRingWorldWidth = 0.0022f;
+    private const int FocusDashCount = 10;
+    private const float FocusDashFill = 0.58f;
+    private const float GuideFocusRingRadiusPixels = 15f;
+    private static readonly Color DeepSkyBlue = new Color(0f, 0.32f, 0.88f, 1f);
 
     public string socketID;
     public WireColor acceptColor = WireColor.Any;
@@ -14,13 +14,15 @@ public class SocketPoint : MonoBehaviour
     public Material highlightMat;
 
     private Material originalMat;
-    private Material guideFocusRingMat;
     private Renderer socketRenderer;
     private GameObject guideFocusRing;
+    private SpriteRenderer guideFocusRenderer;
     private Vector3 originalLocalScale;
     private bool hasOriginalState;
     private bool guideFocused;
     private bool clickSelected;
+    private static Texture2D dashedFocusTexture;
+    private static Sprite dashedFocusSprite;
 
     public bool AllowsMultipleConnections =>
         string.Equals(socketID, "5VDC", StringComparison.OrdinalIgnoreCase) ||
@@ -60,23 +62,12 @@ public class SocketPoint : MonoBehaviour
     private void RefreshFocusVisual()
     {
         bool showRing = guideFocused || clickSelected;
-        transform.localScale = clickSelected
-            ? originalLocalScale * 1.38f
-            : guideFocused
-                ? originalLocalScale * GuideFocusScale
-                : originalLocalScale;
+        transform.localScale = originalLocalScale;
 
         EnsureGuideFocusRing();
+        RebuildGuideFocusRing(clickSelected ? 1.08f : 1f);
         guideFocusRing.SetActive(showRing);
-        LineRenderer ring = guideFocusRing.GetComponent<LineRenderer>();
-        if (ring != null)
-        {
-            Color ringColor = clickSelected
-                ? new Color(0.12f, 0.36f, 0.78f, 1f)
-                : new Color(0.05f, 0.45f, 0.9f, 1f);
-            ring.startColor = ringColor;
-            ring.endColor = ringColor;
-        }
+        guideFocusRenderer.color = DeepSkyBlue;
     }
 
     private void CaptureOriginalState()
@@ -97,54 +88,106 @@ public class SocketPoint : MonoBehaviour
         if (guideFocusRing != null)
             return;
 
-        guideFocusRing = new GameObject("SocketGuideFocus");
-        guideFocusRing.transform.SetParent(transform, false);
-        guideFocusRing.transform.localPosition = new Vector3(0f, 0f, 0.16f);
-        guideFocusRing.transform.localRotation = Quaternion.identity;
-        guideFocusRing.transform.localScale = Vector3.one;
-
-        LineRenderer ring = guideFocusRing.AddComponent<LineRenderer>();
-        ring.useWorldSpace = false;
-        ring.loop = true;
-        ring.positionCount = GuideFocusSegments;
-        ring.startWidth = GuideFocusRingWorldWidth;
-        ring.endWidth = GuideFocusRingWorldWidth;
-        ring.numCapVertices = 2;
-        ring.numCornerVertices = 2;
-        ring.alignment = LineAlignment.View;
-        ring.sortingOrder = 4500;
-        ring.material = GetGuideFocusRingMaterial();
-        Color ringColor = new Color(0.05f, 0.45f, 0.9f, 1f);
-        ring.startColor = ringColor;
-        ring.endColor = ringColor;
-
-        for (int i = 0; i < GuideFocusSegments; i++)
-        {
-            float angle = i * Mathf.PI * 2f / GuideFocusSegments;
-            ring.SetPosition(
-                i,
-                new Vector3(
-                    Mathf.Cos(angle) * GuideFocusRingRadius,
-                    Mathf.Sin(angle) * GuideFocusRingRadius,
-                    0f));
-        }
+        guideFocusRing = new GameObject($"SocketGuideFocus_{socketID}");
+        guideFocusRing.transform.SetParent(null, false);
+        guideFocusRenderer = guideFocusRing.AddComponent<SpriteRenderer>();
+        guideFocusRenderer.sprite = GetDashedFocusSprite();
+        guideFocusRenderer.color = DeepSkyBlue;
+        guideFocusRenderer.sortingOrder = 4500;
 
         guideFocusRing.SetActive(false);
     }
 
-    private Material GetGuideFocusRingMaterial()
+    private void RebuildGuideFocusRing(float scale)
     {
-        if (guideFocusRingMat != null)
-            return guideFocusRingMat;
+        Camera camera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        if (camera == null || guideFocusRing == null)
+            return;
 
-        Shader shader = Shader.Find("Sprites/Default");
-        if (shader == null)
-            shader = Shader.Find("Universal Render Pipeline/Unlit");
-        if (shader == null)
-            shader = Shader.Find("Unlit/Color");
+        Vector3 socketScreen = camera.WorldToScreenPoint(transform.position);
+        if (socketScreen.z <= camera.nearClipPlane)
+            return;
 
-        guideFocusRingMat = new Material(shader);
-        guideFocusRingMat.renderQueue = 4500;
-        return guideFocusRingMat;
+        float ringDepth = Mathf.Max(camera.nearClipPlane + 0.01f, socketScreen.z - 0.006f);
+        float radiusPixels = GuideFocusRingRadiusPixels * scale;
+        Vector3 center = camera.ScreenToWorldPoint(
+            new Vector3(socketScreen.x, socketScreen.y, ringDepth));
+        Vector3 radiusRight = camera.ScreenToWorldPoint(
+            new Vector3(socketScreen.x + radiusPixels, socketScreen.y, ringDepth)) - center;
+        Vector3 radiusUp = camera.ScreenToWorldPoint(
+            new Vector3(socketScreen.x, socketScreen.y + radiusPixels, ringDepth)) - center;
+        float worldDiameter = radiusRight.magnitude + radiusUp.magnitude;
+        guideFocusRing.transform.position = center;
+        guideFocusRing.transform.rotation = camera.transform.rotation;
+        guideFocusRing.transform.localScale = Vector3.one * worldDiameter;
+    }
+
+    private static Sprite GetDashedFocusSprite()
+    {
+        if (dashedFocusSprite != null)
+            return dashedFocusSprite;
+
+        const int textureSize = 256;
+        const float outerRadius = 112f;
+        const float innerRadius = 82f;
+        const float edgeFeather = 1.5f;
+        float center = (textureSize - 1) * 0.5f;
+        float dashStep = Mathf.PI * 2f / FocusDashCount;
+        float halfDashAngle = dashStep * FocusDashFill * 0.5f;
+        float angularFeather = edgeFeather / ((outerRadius + innerRadius) * 0.5f);
+
+        dashedFocusTexture = new Texture2D(
+            textureSize,
+            textureSize,
+            TextureFormat.ARGB32,
+            false)
+        {
+            name = "RuntimeDashedSocketFocus",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+
+        Color[] pixels = new Color[textureSize * textureSize];
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                float dx = x - center;
+                float dy = y - center;
+                float radius = Mathf.Sqrt(dx * dx + dy * dy);
+                float radialAlpha = Mathf.Clamp01(
+                    Mathf.Min(
+                        (radius - innerRadius) / edgeFeather,
+                        (outerRadius - radius) / edgeFeather));
+
+                float angle = Mathf.Atan2(dy, dx);
+                float localAngle = Mathf.Repeat(angle + dashStep * 0.5f, dashStep) -
+                    dashStep * 0.5f;
+                float angularAlpha = Mathf.Clamp01(
+                    (halfDashAngle - Mathf.Abs(localAngle)) / angularFeather);
+                float alpha = Mathf.SmoothStep(0f, 1f, Mathf.Min(radialAlpha, angularAlpha));
+                pixels[y * textureSize + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+
+        dashedFocusTexture.SetPixels(pixels);
+        dashedFocusTexture.Apply(false, true);
+        dashedFocusSprite = Sprite.Create(
+            dashedFocusTexture,
+            new Rect(0f, 0f, textureSize, textureSize),
+            new Vector2(0.5f, 0.5f),
+            textureSize,
+            0,
+            SpriteMeshType.FullRect);
+        dashedFocusSprite.name = "RuntimeDashedSocketFocus";
+        dashedFocusSprite.hideFlags = HideFlags.HideAndDontSave;
+        return dashedFocusSprite;
+    }
+
+    private void OnDestroy()
+    {
+        if (guideFocusRing != null)
+            Destroy(guideFocusRing);
     }
 }

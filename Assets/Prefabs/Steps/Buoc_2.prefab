@@ -428,7 +428,7 @@ GameObject:
   - component: {fileID: 1937513622038517509}
   - component: {fileID: 8971263596241728807}
   m_Layer: 0
-  m_Name: Wire_08_Enc_A-X4
+  m_Name: Wire_08_Enc_A-X3
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -523,7 +523,7 @@ MonoBehaviour:
   plugA: {fileID: 394772775295824357}
   plugB: {fileID: 5785260178697782364}
   correctSocketA: Enc_A
-  correctSocketB: X4
+  correctSocketB: X3
   wireColor: 1
   wireWidth: 0.005
   sagAmount: 0.05
@@ -1578,7 +1578,7 @@ GameObject:
   - component: {fileID: 5294570255307392595}
   - component: {fileID: 3933861222883823861}
   m_Layer: 0
-  m_Name: Wire_11_Pin15-X1
+  m_Name: Wire_11_Pin15-X0
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1783,7 +1783,7 @@ MonoBehaviour:
   plugA: {fileID: 6182186624100737735}
   plugB: {fileID: 3667195354619440489}
   correctSocketA: Pin15
-  correctSocketB: X1
+  correctSocketB: X0
   wireColor: 2
   wireWidth: 0.005
   sagAmount: 0.05
@@ -2976,7 +2976,7 @@ GameObject:
   - component: {fileID: 6090189297854417078}
   - component: {fileID: 4816866678852753390}
   m_Layer: 0
-  m_Name: Wire_10_Pin13-X0
+  m_Name: Wire_10_Pin13-X1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3181,7 +3181,7 @@ MonoBehaviour:
   plugA: {fileID: 2740653796598092965}
   plugB: {fileID: 4693882186936674701}
   correctSocketA: Pin13
-  correctSocketB: X0
+  correctSocketB: X1
   wireColor: 2
   wireWidth: 0.005
   sagAmount: 0.05
@@ -3202,7 +3202,7 @@ GameObject:
   - component: {fileID: 3910898186076317651}
   - component: {fileID: 577971971890662893}
   m_Layer: 0
-  m_Name: Wire_09_Enc_B-X3
+  m_Name: Wire_09_Enc_B-X4
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3297,7 +3297,7 @@ MonoBehaviour:
   plugA: {fileID: 6870637654169185525}
   plugB: {fileID: 2097232290066857735}
   correctSocketA: Enc_B
-  correctSocketB: X3
+  correctSocketB: X4
   wireColor: 1
   wireWidth: 0.005
   sagAmount: 0.05

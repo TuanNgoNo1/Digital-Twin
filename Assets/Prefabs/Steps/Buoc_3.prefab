@@ -719,7 +719,7 @@ GameObject:
   - component: {fileID: 5428120348342551662}
   - component: {fileID: 930740968352623859}
   m_Layer: 0
-  m_Name: Wire_14_oC-Motor_A
+  m_Name: Wire_14_oC-Motor_C
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -924,7 +924,7 @@ MonoBehaviour:
   plugA: {fileID: 166416363421113968}
   plugB: {fileID: 4459580623436737019}
   correctSocketA: oC
-  correctSocketB: Motor_A
+  correctSocketB: Motor_C
   wireColor: 3
   wireWidth: 0.005
   sagAmount: 0.05
@@ -1470,7 +1470,7 @@ GameObject:
   - component: {fileID: 7679590514293120447}
   - component: {fileID: 4257024834087967348}
   m_Layer: 0
-  m_Name: Wire_12_oA-Motor_S
+  m_Name: Wire_12_oA-Motor_A
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1675,7 +1675,7 @@ MonoBehaviour:
   plugA: {fileID: 1767115203134867677}
   plugB: {fileID: 8853325626195821298}
   correctSocketA: oA
-  correctSocketB: Motor_S
+  correctSocketB: Motor_A
   wireColor: 1
   wireWidth: 0.005
   sagAmount: 0.05

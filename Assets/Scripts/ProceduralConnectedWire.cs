@@ -33,17 +33,33 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
             return false;
 
         Camera camera = Camera.main;
-        Vector3 midpoint = (start + end) * 0.5f;
         Vector3 surfaceNormal = camera != null
-            ? (camera.transform.position - midpoint).normalized
+            ? -camera.transform.forward.normalized
             : -Vector3.forward;
         float surfaceOffset = Mathf.Clamp(radius * 0.8f, 0.0015f, 0.0045f);
         start += surfaceNormal * surfaceOffset;
         end += surfaceNormal * surfaceOffset;
 
-        float drop = 0f;
-        Vector3 controlA = Vector3.Lerp(start, end, 0.28f) + Vector3.down * drop;
-        Vector3 controlB = Vector3.Lerp(start, end, 0.72f) + Vector3.down * drop;
+        Vector3 routeRight = camera != null ? camera.transform.right.normalized : Vector3.right;
+        Vector3 routeUp = camera != null ? camera.transform.up.normalized : Vector3.up;
+        Vector3 delta = end - start;
+        float horizontalDistance = Vector3.Dot(delta, routeRight);
+        float verticalDistance = Vector3.Dot(delta, routeUp);
+
+        Vector3 bendA;
+        Vector3 bendB;
+        if (Mathf.Abs(horizontalDistance) >= Mathf.Abs(verticalDistance))
+        {
+            Vector3 halfHorizontal = routeRight * (horizontalDistance * 0.5f);
+            bendA = start + halfHorizontal;
+            bendB = end - halfHorizontal;
+        }
+        else
+        {
+            Vector3 halfVertical = routeUp * (verticalDistance * 0.5f);
+            bendA = start + halfVertical;
+            bendB = end - halfVertical;
+        }
 
         int ringCount = PathSegments + 1;
         int capStartIndex = ringCount * RadialSegments;
@@ -56,7 +72,7 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
         for (int pathIndex = 0; pathIndex < ringCount; pathIndex++)
         {
             float t = pathIndex / (float)PathSegments;
-            centers[pathIndex] = EvaluateBezier(start, controlA, controlB, end, t);
+            centers[pathIndex] = EvaluateRightAnglePath(start, bendA, bendB, end, t);
         }
 
         for (int pathIndex = 0; pathIndex < ringCount; pathIndex++)
@@ -177,18 +193,35 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
         return terminalCollar ? radius * 1.38f : radius;
     }
 
-    private static Vector3 EvaluateBezier(
+    private static Vector3 EvaluateRightAnglePath(
         Vector3 start,
-        Vector3 controlA,
-        Vector3 controlB,
+        Vector3 bendA,
+        Vector3 bendB,
         Vector3 end,
         float t)
     {
-        float inverse = 1f - t;
-        return inverse * inverse * inverse * start +
-            3f * inverse * inverse * t * controlA +
-            3f * inverse * t * t * controlB +
-            t * t * t * end;
+        Vector3[] points = { start, bendA, bendB, end };
+        float totalLength = 0f;
+        for (int i = 0; i < points.Length - 1; i++)
+            totalLength += Vector3.Distance(points[i], points[i + 1]);
+
+        if (totalLength <= 0.000001f)
+            return Vector3.Lerp(start, end, t);
+
+        float remaining = Mathf.Clamp01(t) * totalLength;
+        for (int i = 0; i < points.Length - 1; i++)
+        {
+            float segmentLength = Vector3.Distance(points[i], points[i + 1]);
+            if (segmentLength <= 0.000001f)
+                continue;
+
+            if (remaining <= segmentLength)
+                return Vector3.Lerp(points[i], points[i + 1], remaining / segmentLength);
+
+            remaining -= segmentLength;
+        }
+
+        return end;
     }
 
     private void OnDestroy()

@@ -2971,8 +2971,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::WireBody
   plugA: {fileID: 2218098119117551550}
   plugB: {fileID: 9175095835981385365}
-  correctSocketA: X0
-  correctSocketB: oB
+  correctSocketA: Y1
+  correctSocketB: Pin9
   wireColor: 2
   wireWidth: 0.005
   sagAmount: 0.05

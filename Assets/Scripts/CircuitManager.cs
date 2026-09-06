@@ -15,6 +15,7 @@ public class CircuitManager : MonoBehaviour
     private const int WireLayoutSlotCount = 6;
     private const string StartSceneName = "StartScene";
     private const string CompletionCheatCode = "6394";
+    private const string NewBoardTextureResource = "NewServoWiringBoard";
     private static readonly string[] PracticalNavigationLabels =
     {
         "1. \u0110\u1EA5u n\u1ED1i m\u1EA1ch \u0111i\u1EC1u khi\u1EC3n \u0111\u1ED9ng c\u01A1",
@@ -139,6 +140,7 @@ public class CircuitManager : MonoBehaviour
     private static int savedHighestUnlockedStepIndex;
     private static int savedCompletedWires;
     private static bool savedSystemUnlocked;
+    private Material newBoardMaterial;
     private static readonly List<SavedWireConnection> savedWireConnections = new List<SavedWireConnection>();
 
     private sealed class StepNavigationItem
@@ -285,6 +287,10 @@ public class CircuitManager : MonoBehaviour
             ? PLCController_v2.Instance
             : FindObjectOfType<PLCController_v2>();
 
+        // Finalize the camera first. The replacement board and all socket
+        // anchors are then built square to the camera's final pose.
+        EnsureResponsiveCameraFraming();
+
         AutoFindStepRoots();
         AutoFindGuideRoots();
         if (stepRoots.Count != 3)
@@ -299,8 +305,8 @@ public class CircuitManager : MonoBehaviour
         CreateStepResultPopup();
         CreateStepNavigationBar();
         CreateGuideReturnButton();
-        EnsureResponsiveCameraFraming();
         CreatePracticalWorkspaceLayout();
+        ApplyNewServoBoardLayout();
         EnsureBoardStepHeading();
         ApplyExtraBoldPracticalText();
 
@@ -332,6 +338,264 @@ public class CircuitManager : MonoBehaviour
 
         Debug.Log($"[Circuit] Bat dau Buoc 1: {GetStepWires(stepRoots[0]).Count} day. Tong cong {totalWires} day.");
         EvaluateCircuit();
+    }
+
+    private void ApplyNewServoBoardLayout()
+    {
+        Texture2D boardTexture = Resources.Load<Texture2D>(NewBoardTextureResource);
+        GameObject boardObject = GameObject.Find("Board");
+        Renderer boardRenderer = boardObject != null ? boardObject.GetComponent<Renderer>() : null;
+        Camera mainCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        if (boardTexture == null || boardRenderer == null || mainCamera == null)
+        {
+            Debug.LogWarning("[Circuit] Khong the tao bang noi day moi: thieu texture, Board hoac camera.");
+            return;
+        }
+
+        Bounds boardBounds = boardRenderer.bounds;
+        Vector3 center = boardBounds.center;
+        Vector3 right = mainCamera.transform.right.normalized;
+        Vector3 up = mainCamera.transform.up.normalized;
+        Vector3 surfaceNormal = -mainCamera.transform.forward.normalized;
+        float availableWidth = ProjectedBoundsSize(boardBounds, right);
+        float availableHeight = ProjectedBoundsSize(boardBounds, up);
+        float textureAspect = boardTexture.width / (float)boardTexture.height;
+        float width = availableWidth;
+        float height = width / textureAspect;
+        if (height > availableHeight)
+        {
+            height = availableHeight;
+            width = height * textureAspect;
+        }
+
+        // Leave a clean margin and lower the board slightly so the navigation
+        // bar never clips the faculty/title line at the top.
+        width *= 0.92f;
+        height *= 0.92f;
+        Vector3 layoutCenter = center -
+            up * (availableHeight * 0.07f) +
+            surfaceNormal * 0.025f;
+        TryFitBoardInsideModelPanel(
+            mainCamera,
+            center,
+            textureAspect,
+            ref layoutCenter,
+            ref width,
+            ref height);
+
+        GameObject existingSurfaceObject = GameObject.Find("NewServoWiringBoardSurface");
+        Transform existingSurface = existingSurfaceObject != null ? existingSurfaceObject.transform : null;
+        GameObject surface;
+        if (existingSurface != null)
+        {
+            surface = existingSurface.gameObject;
+        }
+        else
+        {
+            surface = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            surface.name = "NewServoWiringBoardSurface";
+            Collider surfaceCollider = surface.GetComponent<Collider>();
+            if (surfaceCollider != null)
+                Destroy(surfaceCollider);
+        }
+
+        surface.transform.SetParent(null, true);
+        // Keep a visible depth gap from every legacy board plane. A tiny
+        // coplanar offset still produced large triangular z-fighting artifacts
+        // on some GPUs/camera angles.
+        surface.transform.position = layoutCenter;
+        // Unity's built-in Quad faces local -Z.  Point -Z toward the camera so
+        // the uploaded board stays upright and parallel to the camera plane.
+        surface.transform.rotation = mainCamera.transform.rotation;
+        surface.transform.localScale = new Vector3(width, height, 1f);
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Texture");
+        if (shader == null)
+        {
+            Debug.LogWarning("[Circuit] Khong tim thay shader de hien bang noi day moi.");
+            return;
+        }
+
+        newBoardMaterial = new Material(shader) { name = "Runtime_NewServoWiringBoard" };
+        if (newBoardMaterial.HasProperty("_BaseMap"))
+            newBoardMaterial.SetTexture("_BaseMap", boardTexture);
+        if (newBoardMaterial.HasProperty("_MainTex"))
+            newBoardMaterial.SetTexture("_MainTex", boardTexture);
+        if (newBoardMaterial.HasProperty("_BaseColor"))
+            newBoardMaterial.SetColor("_BaseColor", Color.white);
+        if (newBoardMaterial.HasProperty("_Color"))
+            newBoardMaterial.SetColor("_Color", Color.white);
+        if (newBoardMaterial.HasProperty("_Cull"))
+            newBoardMaterial.SetFloat("_Cull", 0f);
+
+        MeshRenderer surfaceRenderer = surface.GetComponent<MeshRenderer>();
+        surfaceRenderer.sharedMaterial = newBoardMaterial;
+        HideLegacyBoardModels(boardObject.transform.root, surfaceRenderer);
+        HideLegacyBoardOverlays();
+
+        Dictionary<string, Vector2> socketPixels = new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "24VDC", new Vector2(116f, 228f) },
+            { "GND_24V", new Vector2(246f, 228f) },
+            { "5VDC", new Vector2(396f, 228f) },
+            { "GND_5V", new Vector2(523f, 228f) },
+            { "X4", new Vector2(137f, 412f) },
+            { "X3", new Vector2(137f, 478.5f) },
+            { "X2", new Vector2(137f, 544.5f) },
+            { "X1", new Vector2(137f, 608f) },
+            { "X0", new Vector2(137f, 672f) },
+            { "SS", new Vector2(137f, 734.5f) },
+            { "Y4", new Vector2(409f, 418.5f) },
+            { "Y3", new Vector2(409f, 486f) },
+            { "Y2", new Vector2(408.5f, 554f) },
+            { "Y1", new Vector2(409f, 625f) },
+            { "Y0", new Vector2(408.5f, 698.5f) },
+            { "+V4", new Vector2(537.5f, 427f) },
+            { "+V3", new Vector2(537.5f, 502f) },
+            { "+V2", new Vector2(537.5f, 578.5f) },
+            { "+V1", new Vector2(537f, 654.5f) },
+            { "+V0", new Vector2(538f, 733f) },
+            { "Pin11", new Vector2(678f, 338f) },
+            { "Pin12", new Vector2(678f, 400f) },
+            { "Pin9", new Vector2(678f, 460f) },
+            { "Pin10", new Vector2(678f, 524.5f) },
+            { "Pin15", new Vector2(678f, 611f) },
+            { "Pin16", new Vector2(678f, 672f) },
+            { "Pin13", new Vector2(678f, 729f) },
+            { "Pin14", new Vector2(678f, 785.5f) },
+            { "oA", new Vector2(863.5f, 377f) },
+            { "oB", new Vector2(865.5f, 458.5f) },
+            { "oC", new Vector2(865.5f, 535f) },
+            { "Motor_A", new Vector2(1088f, 560f) },
+            { "Motor_B", new Vector2(1088f, 621f) },
+            { "Motor_C", new Vector2(1087.5f, 681.5f) },
+            { "Enc_A", new Vector2(1128f, 805.5f) },
+            { "Enc_B", new Vector2(1128f, 884f) }
+        };
+
+        foreach (SocketPoint socket in FindObjectsByType<SocketPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (socket == null || !socketPixels.TryGetValue(socket.socketID, out Vector2 pixel))
+                continue;
+
+            float horizontal = pixel.x / boardTexture.width - 0.5f;
+            float vertical = 0.5f - pixel.y / boardTexture.height;
+            socket.transform.position = layoutCenter +
+                right * (horizontal * width) +
+                up * (vertical * height) +
+                surfaceNormal * 0.01f;
+            socket.transform.rotation = surface.transform.rotation;
+        }
+
+        Debug.Log($"[Circuit] Da thay bang moi va can lai {socketPixels.Count} vi tri socket.");
+    }
+
+    private bool TryFitBoardInsideModelPanel(
+        Camera mainCamera,
+        Vector3 fallbackBoardCenter,
+        float textureAspect,
+        ref Vector3 boardCenter,
+        ref float boardWidth,
+        ref float boardHeight)
+    {
+        if (practicalWorkspaceRoot == null || mainCamera == null)
+            return false;
+
+        RectTransform modelPanel = practicalWorkspaceRoot.transform.Find("ModelPanel") as RectTransform;
+        if (modelPanel == null)
+            return false;
+
+        Canvas.ForceUpdateCanvases();
+        Vector3[] panelCorners = new Vector3[4];
+        modelPanel.GetWorldCorners(panelCorners);
+        Vector2 bottomLeft = RectTransformUtility.WorldToScreenPoint(mainCamera, panelCorners[0]);
+        Vector2 topRight = RectTransformUtility.WorldToScreenPoint(mainCamera, panelCorners[2]);
+        float panelWidth = Mathf.Abs(topRight.x - bottomLeft.x);
+        float panelHeight = Mathf.Abs(topRight.y - bottomLeft.y);
+        if (panelWidth < 1f || panelHeight < 1f)
+            return false;
+
+        const float panelFill = 0.96f;
+        float targetPixelWidth = panelWidth * panelFill;
+        float targetPixelHeight = panelHeight * panelFill;
+        if (targetPixelWidth / targetPixelHeight > textureAspect)
+            targetPixelWidth = targetPixelHeight * textureAspect;
+        else
+            targetPixelHeight = targetPixelWidth / textureAspect;
+
+        Vector2 panelCenter = (bottomLeft + topRight) * 0.5f;
+        float boardDepth = mainCamera.WorldToScreenPoint(fallbackBoardCenter).z - 0.025f;
+        if (boardDepth <= mainCamera.nearClipPlane)
+            return false;
+
+        Vector3 centerWorld = mainCamera.ScreenToWorldPoint(
+            new Vector3(panelCenter.x, panelCenter.y, boardDepth));
+        Vector3 leftWorld = mainCamera.ScreenToWorldPoint(
+            new Vector3(panelCenter.x - targetPixelWidth * 0.5f, panelCenter.y, boardDepth));
+        Vector3 rightWorld = mainCamera.ScreenToWorldPoint(
+            new Vector3(panelCenter.x + targetPixelWidth * 0.5f, panelCenter.y, boardDepth));
+        Vector3 bottomWorld = mainCamera.ScreenToWorldPoint(
+            new Vector3(panelCenter.x, panelCenter.y - targetPixelHeight * 0.5f, boardDepth));
+        Vector3 topWorld = mainCamera.ScreenToWorldPoint(
+            new Vector3(panelCenter.x, panelCenter.y + targetPixelHeight * 0.5f, boardDepth));
+
+        boardCenter = centerWorld;
+        boardWidth = Vector3.Distance(leftWorld, rightWorld);
+        boardHeight = Vector3.Distance(bottomWorld, topWorld);
+        return true;
+    }
+
+    private static void HideLegacyBoardModels(
+        Transform modelRoot,
+        Renderer surfaceRenderer)
+    {
+        foreach (Renderer renderer in modelRoot.GetComponentsInChildren<Renderer>(true))
+        {
+            if (renderer == null || renderer == surfaceRenderer)
+                continue;
+
+            // The new board texture already contains the PLC, HMI, driver,
+            // motor and encoder.  Disable every old model renderer so none of
+            // those meshes can cover or z-fight with the replacement surface.
+            renderer.enabled = false;
+        }
+    }
+
+    private static void HideLegacyBoardOverlays()
+    {
+        string[] legacyRootNames =
+        {
+            "bd-Photoroom",
+            "bhd (1)",
+            "HMI_Runtime_Canvas"
+        };
+
+        foreach (Transform candidate in FindObjectsByType<Transform>(
+                     FindObjectsInactive.Include,
+                     FindObjectsSortMode.None))
+        {
+            if (candidate == null || candidate.parent != null ||
+                !legacyRootNames.Contains(candidate.name))
+                continue;
+
+            foreach (Renderer renderer in candidate.GetComponentsInChildren<Renderer>(true))
+                renderer.enabled = false;
+
+            if (candidate.name == "HMI_Runtime_Canvas")
+                candidate.gameObject.SetActive(false);
+        }
+    }
+
+    private static float ProjectedBoundsSize(Bounds bounds, Vector3 axis)
+    {
+        Vector3 size = bounds.size;
+        return Mathf.Abs(axis.x) * size.x + Mathf.Abs(axis.y) * size.y + Mathf.Abs(axis.z) * size.z;
+    }
+
+    private void OnDestroy()
+    {
+        if (newBoardMaterial != null)
+            Destroy(newBoardMaterial);
     }
 
     private void EnsureResponsiveCameraFraming()
@@ -526,8 +790,11 @@ public class CircuitManager : MonoBehaviour
                     i == currentStepIndex && currentStepIndex < stepRoots.Count && !systemUnlocked);
             }
 
+            // The supplied board image is now the wiring reference.  Keeping
+            // the legacy guide layer active would draw its lines and labels
+            // over the new board.
             if (i < guideRoots.Count && guideRoots[i] != null)
-                guideRoots[i].SetActive(i == visibleStepIndex);
+                guideRoots[i].SetActive(false);
         }
 
         if (boardStepHeading != null)
@@ -690,11 +957,11 @@ public class CircuitManager : MonoBehaviour
             foreach (WireBody wire in GetStepWires(stepRoot))
             {
                 int wireNumber = GetWireNumber(wire);
-                GameObject prefab = GetConnectedWirePrefab(wireNumber);
-                if (prefab != null)
-                    CreateReplacementWireInstance(wireNumber, prefab, modelRoot);
-                else
-                    CreateProceduralWireInstance(wireNumber, wire, modelRoot);
+                // The imported right-angle cable prefabs contain fixed geometry
+                // authored for the old board. Build each connected cable from
+                // its live socket anchors so both ends and its length follow the
+                // replacement board exactly.
+                CreateProceduralWireInstance(wireNumber, wire, modelRoot);
             }
         }
     }
