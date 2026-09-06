@@ -16,7 +16,7 @@ public class XRWireBody : MonoBehaviour
     [Header("=== DÂY VISUAL ===")]
     public LineRenderer lineRenderer;
     public int segments = 15;
-    public float sag = 0.02f;
+    public float sag = 0f;
     public WireColor wireColor = WireColor.Yellow;
 
     [Header("=== TRẠNG THÁI ===")]
@@ -25,6 +25,7 @@ public class XRWireBody : MonoBehaviour
 
     void Start()
     {
+        sag = 0f;
         SetupLineRenderer();
     }
 

@@ -3775,7 +3775,7 @@ MonoBehaviour:
   - {fileID: 1947362442}
   - {fileID: 626978300}
   currentStepIndex: 0
-  arrangeWireHeadsOnStart: 1
+  arrangeWireHeadsOnStart: 0
   layoutCenter: {x: 256.4436, y: 0.0216, z: -47.286}
   columnSpacing: 0.055
   rowSpacing: 0.0649
@@ -3793,6 +3793,26 @@ MonoBehaviour:
   createStepNavigationBar: 1
   stepNavigationButtonSize: {x: 172, y: 82}
   stepNavigationMargin: {x: 24, y: 24}
+  createPracticalWorkspaceLayout: 1
+  practicalCameraVerticalFov: 68
+  practicalCameraOffset: {x: 0.044, y: -0.062}
+  connectBySocketClick: 1
+  connectedWirePrefabs:
+  - {fileID: 919132149155446097, guid: a6140b3bf91f21941bd303d94ba442e5, type: 3}
+  - {fileID: 919132149155446097, guid: 93d3ea099f3a0e0439c97a4e35b82ab6, type: 3}
+  - {fileID: 919132149155446097, guid: e435aa298839e9641ae9c27cfd158ea9, type: 3}
+  - {fileID: 919132149155446097, guid: 64ce34e4e34effa47ae3b7874f507c11, type: 3}
+  - {fileID: 919132149155446097, guid: 72bd931dcf8e51840a62a604f5b3bd33, type: 3}
+  - {fileID: 919132149155446097, guid: 57371f9358d47f64b9a81045d955b9bf, type: 3}
+  - {fileID: 919132149155446097, guid: ca2d88066ba758f43981d10186e00efc, type: 3}
+  - {fileID: 919132149155446097, guid: 705fdbbff24cd514abbd3eae37c6139c, type: 3}
+  - {fileID: 919132149155446097, guid: d7f7494a407fab448a1fbb50a2efcf66, type: 3}
+  - {fileID: 919132149155446097, guid: ff03ebc9db7b2d3479ed2ad891f5a3f1, type: 3}
+  - {fileID: 919132149155446097, guid: eb06f9a8e2557ad4fa9c6716c8e4f245, type: 3}
+  - {fileID: 919132149155446097, guid: a40d63c9e77e1514091ec939e0694004, type: 3}
+  - {fileID: 919132149155446097, guid: e2a7e84586106d140ac3e0588e4624e4, type: 3}
+  - {fileID: 919132149155446097, guid: c9e47ad77ff7b4d4aa00d76de20cc0cb, type: 3}
+  - {fileID: 919132149155446097, guid: 189dbd6adc9d94c49b672b7caa1c09da, type: 3}
   preserveWideCameraFraming: 1
   cameraDesignAspect: 2.25
   cameraDesignVerticalFov: 60
@@ -10447,6 +10467,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 3D_Thay_Tien_1
       objectReference: {fileID: 0}
+    - target: {fileID: 2229032678205019293, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: c6e4d965495559f4a9cfd05c8dc6a02f, type: 2}
     - target: {fileID: 6063329460619265424, guid: dac9f705c3d67b140b3e0ac53e592922, type: 3}
       propertyPath: m_LocalPosition.z
       value: 0.069

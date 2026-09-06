@@ -4,6 +4,7 @@ using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
@@ -18,7 +19,7 @@ public class CircuitManager : MonoBehaviour
     {
         "1. \u0110\u1EA5u n\u1ED1i m\u1EA1ch \u0111i\u1EC1u khi\u1EC3n \u0111\u1ED9ng c\u01A1",
         "2. \u0110\u1EA5u n\u1ED1i encoder",
-        "\u0110\u1EA5u n\u1ED1i m\u1EA1ch l\u1EF1c",
+        "3. \u0110\u1EA5u n\u1ED1i m\u1EA1ch l\u1EF1c",
         "4. V\u1EADn h\u00E0nh"
     };
     private static readonly string[] NavigationStepTitles = { "Bước 1", "Bước 2", "Bước 3", "Bước 4" };
@@ -66,6 +67,11 @@ public class CircuitManager : MonoBehaviour
     public float practicalCameraVerticalFov = 68f;
     public Vector2 practicalCameraOffset = new Vector2(0.044f, -0.062f);
 
+    [Header("Chon hai socket de tu dong noi day")]
+    public bool connectBySocketClick = true;
+    [Tooltip("Model day da noi, sap theo so day tu 1 den 15.")]
+    public GameObject[] connectedWirePrefabs = new GameObject[15];
+
     [Header("Camera responsive khong crop hai ben")]
     public bool preserveWideCameraFraming = true;
     public float cameraDesignAspect = 2.25f;
@@ -100,6 +106,14 @@ public class CircuitManager : MonoBehaviour
     private GameObject practicalWorkspaceMaskRoot;
     private RectTransform stepNavigationPanelRect;
     private RectTransform guideReturnButtonRect;
+    private RectTransform previousStepButtonShadow;
+    private RectTransform resetStepButtonShadow;
+    private Button previousStepButton;
+    private Button resetStepButton;
+    private int lastPracticalActionFrame = -1;
+    private SocketPoint selectedSocket;
+    private readonly Dictionary<int, GameObject> replacementWireInstances =
+        new Dictionary<int, GameObject>();
     private readonly List<Button> stepNavigationButtons = new List<Button>();
     private readonly List<StepNavigationItem> stepNavigationItems = new List<StepNavigationItem>();
     private readonly List<SocketPoint> focusedStepSockets = new List<SocketPoint>();
@@ -107,7 +121,6 @@ public class CircuitManager : MonoBehaviour
     private TextMeshProUGUI popupStatusText;
     private TextMeshProUGUI popupMessageText;
     private TextMeshProUGUI popupButtonText;
-    private TextMeshProUGUI practicalInstructionText;
     private TextMeshProUGUI practicalWireGuideText;
     private readonly List<GameObject> practicalWireRows = new List<GameObject>();
     private readonly List<TextMeshProUGUI> practicalWireRowNumbers = new List<TextMeshProUGUI>();
@@ -133,6 +146,7 @@ public class CircuitManager : MonoBehaviour
         public Image Background;
         public Image Border;
         public Image Shadow;
+        public Image Indicator;
         public TextMeshProUGUI Title;
         public TextMeshProUGUI Description;
         public readonly List<Graphic> IconGraphics = new List<Graphic>();
@@ -161,6 +175,104 @@ public class CircuitManager : MonoBehaviour
     private void Update()
     {
         HandleCompletionCheatCode();
+        HandleSocketClickInput();
+    }
+
+    private void HandleSocketClickInput()
+    {
+        if (!connectBySocketClick || !initialized || popupVisible || systemUnlocked ||
+            visibleStepIndex != currentStepIndex)
+        {
+            return;
+        }
+
+        bool clickStarted = Mouse.current != null
+            ? Mouse.current.leftButton.wasPressedThisFrame
+            : Input.GetMouseButtonDown(0);
+        if (!clickStarted)
+            return;
+
+        Vector2 screenPosition = Mouse.current != null
+            ? Mouse.current.position.ReadValue()
+            : (Vector2)Input.mousePosition;
+        if (IsScreenPointInside(resetStepButton, screenPosition))
+        {
+            InvokePracticalAction(ResetVisibleStep);
+            return;
+        }
+
+        if (IsScreenPointInside(previousStepButton, screenPosition))
+        {
+            InvokePracticalAction(ShowPreviousPracticalStep);
+            return;
+        }
+
+        if (IsPointerOverStepNavigation(screenPosition))
+            return;
+
+        SocketPoint clickedSocket = FindSocketAtScreenPosition(screenPosition);
+        if (clickedSocket == null)
+            return;
+
+        Debug.Log($"[Circuit] Click socket: {clickedSocket.socketID}");
+        HandleSocketClicked(clickedSocket);
+    }
+
+    private SocketPoint FindSocketAtScreenPosition(Vector2 screenPosition)
+    {
+        Camera mainCamera = Camera.main != null ? Camera.main : FindFirstObjectByType<Camera>();
+        if (mainCamera == null)
+            return null;
+
+        Ray ray = mainCamera.ScreenPointToRay(screenPosition);
+        foreach (RaycastHit hit in Physics.RaycastAll(ray).OrderBy(candidate => candidate.distance))
+        {
+            SocketPoint socket = hit.collider.GetComponentInParent<SocketPoint>();
+            if (socket != null && focusedStepSockets.Contains(socket))
+                return socket;
+        }
+
+        float maximumScreenDistance = Mathf.Clamp(Screen.height * 0.028f, 24f, 38f);
+        SocketPoint nearestSocket = null;
+        float nearestDistance = maximumScreenDistance;
+        foreach (SocketPoint socket in focusedStepSockets)
+        {
+            if (socket == null || !socket.gameObject.activeInHierarchy)
+                continue;
+
+            Vector3 socketScreenPosition = mainCamera.WorldToScreenPoint(socket.transform.position);
+            if (socketScreenPosition.z <= 0f)
+                continue;
+
+            float distance = Vector2.Distance(screenPosition, socketScreenPosition);
+            if (distance >= nearestDistance)
+                continue;
+
+            nearestDistance = distance;
+            nearestSocket = socket;
+        }
+
+        return nearestSocket;
+    }
+
+    private bool IsPointerOverWorkspaceAction(Vector2 screenPosition)
+    {
+        return IsScreenPointInside(previousStepButton, screenPosition) ||
+            IsScreenPointInside(resetStepButton, screenPosition);
+    }
+
+    private static bool IsScreenPointInside(Button button, Vector2 screenPosition)
+    {
+        if (button == null || !button.gameObject.activeInHierarchy)
+            return false;
+
+        RectTransform rect = button.transform as RectTransform;
+        Canvas canvas = button.GetComponentInParent<Canvas>();
+        Camera eventCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? canvas.worldCamera
+            : null;
+        return rect != null && RectTransformUtility.RectangleContainsScreenPoint(
+            rect, screenPosition, eventCamera);
     }
 
     public void InitializeGame()
@@ -190,8 +302,11 @@ public class CircuitManager : MonoBehaviour
         EnsureResponsiveCameraFraming();
         CreatePracticalWorkspaceLayout();
         EnsureBoardStepHeading();
+        ApplyExtraBoldPracticalText();
 
-        if (arrangeWireHeadsOnStart)
+        if (connectBySocketClick)
+            InitializeSocketClickMode();
+        else if (arrangeWireHeadsOnStart)
             ArrangeAllSteps();
 
         totalWires = stepRoots.Sum(root => GetStepWires(root).Count);
@@ -213,6 +328,7 @@ public class CircuitManager : MonoBehaviour
 
         UpdateStepNavigationBar();
         UpdateGuideReturnButton();
+        UpdatePracticalActionButtons();
 
         Debug.Log($"[Circuit] Bat dau Buoc 1: {GetStepWires(stepRoots[0]).Count} day. Tong cong {totalWires} day.");
         EvaluateCircuit();
@@ -292,16 +408,18 @@ public class CircuitManager : MonoBehaviour
 
         Debug.Log($"[Circuit] Buoc {currentStepIndex + 1}: {correctInCurrentStep}/{currentWires.Count} day dung. Tong: {completedWires}/{totalWires}.");
 
-        bool allConnected = currentWires.Count > 0 && currentWires.All(wire => wire.isFullyConnected);
-        if (!allConnected)
-            return;
-
-        List<WireBody> wrongWires = currentWires.Where(wire => !wire.isCorrect).ToList();
+        List<WireBody> wrongWires = currentWires
+            .Where(wire => wire.isFullyConnected && !wire.isCorrect)
+            .ToList();
         if (wrongWires.Count > 0)
         {
             ShowWrongWiresPopup(wrongWires);
             return;
         }
+
+        bool allConnected = currentWires.Count > 0 && currentWires.All(wire => wire.isFullyConnected);
+        if (!allConnected)
+            return;
 
         ShowStepCompletedPopup();
     }
@@ -397,6 +515,7 @@ public class CircuitManager : MonoBehaviour
 
     private void ShowOnlyStep(int visibleStepIndex)
     {
+        ClearSelectedSocket();
         for (int i = 0; i < stepRoots.Count; i++)
         {
             if (stepRoots[i] != null)
@@ -417,6 +536,7 @@ public class CircuitManager : MonoBehaviour
         UpdateStepSocketFocus(visibleStepIndex);
         UpdateGuideReturnButton();
         UpdatePracticalWorkspaceLayout();
+        RefreshClickToConnectPresentation();
     }
 
     private void ShowAllCompletedWires()
@@ -443,6 +563,7 @@ public class CircuitManager : MonoBehaviour
         ClearStepSocketFocus();
         UpdateGuideReturnButton();
         UpdatePracticalWorkspaceLayout();
+        RefreshClickToConnectPresentation();
 
         Debug.Log("[Circuit] Da hien lai day ket noi cua ca ba buoc.");
     }
@@ -491,15 +612,278 @@ public class CircuitManager : MonoBehaviour
         focusedStepSockets.Clear();
     }
 
-    private static void SetStepInteractionEnabled(GameObject stepRoot, bool enabled)
+    public void HandleSocketClicked(SocketPoint socket)
+    {
+        if (!connectBySocketClick || !initialized || socket == null || popupVisible || systemUnlocked ||
+            currentStepIndex < 0 || currentStepIndex >= stepRoots.Count ||
+            visibleStepIndex != currentStepIndex)
+        {
+            return;
+        }
+
+        List<WireBody> wires = GetStepWires(stepRoots[currentStepIndex]);
+        if (selectedSocket == null)
+        {
+            if (!wires.Any(wire => !wire.isCorrect && WireUsesSocket(wire, socket.socketID)))
+            {
+                ShowClickInstruction(
+                    $"\u0110\u1EA7u c\u1EAFm <b>{socket.socketID}</b> kh\u00F4ng thu\u1ED9c c\u1EB7p d\u00E2y \u0111ang ch\u1EDD.");
+                return;
+            }
+
+            selectedSocket = socket;
+            selectedSocket.SetClickSelection(true);
+            ShowClickInstruction(
+                $"\u0110\u00E3 ch\u1ECDn <b>{socket.socketID}</b>. H\u00E3y ch\u1ECDn \u0111\u1EA7u c\u1EAFm c\u00F2n l\u1EA1i.");
+            return;
+        }
+
+        if (selectedSocket == socket)
+        {
+            ClearSelectedSocket();
+            UpdatePracticalWorkspaceLayout();
+            return;
+        }
+
+        SocketPoint firstSocket = selectedSocket;
+        ClearSelectedSocket();
+        WireBody matchingWire = wires.FirstOrDefault(wire =>
+            !wire.isCorrect && PairMatchesWire(wire, firstSocket.socketID, socket.socketID));
+        if (matchingWire == null)
+        {
+            ShowWrongSocketPairPopup(firstSocket, socket, wires);
+            return;
+        }
+
+        ConnectWireToSockets(matchingWire, firstSocket, socket);
+        RefreshClickToConnectPresentation();
+        UpdatePracticalWorkspaceLayout();
+        ShowClickInstruction(
+            $"\u0110\u00E3 n\u1ED1i <b>{matchingWire.correctSocketA} - {matchingWire.correctSocketB}</b>.");
+        EvaluateCircuit();
+    }
+
+    private void InitializeSocketClickMode()
+    {
+        foreach (GameObject stepRoot in stepRoots)
+        {
+            SetStepInteractionEnabled(stepRoot, false);
+            foreach (WireBody wire in GetStepWires(stepRoot))
+                SetLegacyWirePresentation(wire, false);
+        }
+
+        CreateReplacementWireInstances();
+    }
+
+    private void CreateReplacementWireInstances()
+    {
+        replacementWireInstances.Clear();
+        Transform modelRoot = GameObject.Find("3D_Thay_Tien_1")?.transform;
+        if (modelRoot == null)
+        {
+            Debug.LogWarning("[Circuit] Khong tim thay model root de gan day moi.");
+            return;
+        }
+
+        foreach (GameObject stepRoot in stepRoots)
+        {
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                int wireNumber = GetWireNumber(wire);
+                GameObject prefab = GetConnectedWirePrefab(wireNumber);
+                if (prefab != null)
+                    CreateReplacementWireInstance(wireNumber, prefab, modelRoot);
+                else
+                    CreateProceduralWireInstance(wireNumber, wire, modelRoot);
+            }
+        }
+    }
+
+    private GameObject GetConnectedWirePrefab(int wireNumber)
+    {
+        int index = wireNumber - 1;
+        return connectedWirePrefabs != null && index >= 0 && index < connectedWirePrefabs.Length
+            ? connectedWirePrefabs[index]
+            : null;
+    }
+
+    private void CreateReplacementWireInstance(int key, GameObject prefab, Transform parent)
+    {
+        if (prefab == null || parent == null)
+            return;
+
+        GameObject instance = Instantiate(prefab, parent, false);
+        instance.name = key + "_ConnectedWire";
+        instance.transform.localPosition = Vector3.zero;
+        instance.transform.localRotation = Quaternion.identity;
+        instance.transform.localScale = Vector3.one;
+        foreach (Collider collider in instance.GetComponentsInChildren<Collider>(true))
+            collider.enabled = false;
+        instance.SetActive(false);
+        replacementWireInstances[key] = instance;
+    }
+
+    private void CreateProceduralWireInstance(
+        int key,
+        WireBody wire,
+        Transform parent)
+    {
+        if (wire == null || parent == null)
+            return;
+
+        GameObject instance = new GameObject(key + "_ConnectedWire");
+        instance.transform.SetParent(parent, false);
+        ProceduralConnectedWire proceduralWire = instance.AddComponent<ProceduralConnectedWire>();
+        proceduralWire.Configure(wire, GetProceduralWireColor(wire));
+        instance.SetActive(false);
+        replacementWireInstances[key] = instance;
+    }
+
+    private void RefreshClickToConnectPresentation()
+    {
+        if (!connectBySocketClick)
+            return;
+
+        for (int stepIndex = 0; stepIndex < stepRoots.Count; stepIndex++)
+        {
+            GameObject stepRoot = stepRoots[stepIndex];
+            bool stepVisible = stepRoot != null && stepRoot.activeInHierarchy;
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                int wireNumber = GetWireNumber(wire);
+                bool shouldShow = stepVisible && wire.isCorrect;
+                bool replacementVisible = SetReplacementActive(wireNumber, shouldShow);
+                SetLegacyWirePresentation(wire, shouldShow && !replacementVisible);
+            }
+        }
+    }
+
+    private bool SetReplacementActive(int key, bool active)
+    {
+        if (!replacementWireInstances.TryGetValue(key, out GameObject instance) || instance == null)
+            return false;
+
+        if (!active)
+        {
+            instance.SetActive(false);
+            return false;
+        }
+
+        ProceduralConnectedWire proceduralWire = instance.GetComponent<ProceduralConnectedWire>();
+        if (proceduralWire != null && !proceduralWire.Rebuild())
+        {
+            instance.SetActive(false);
+            return false;
+        }
+
+        instance.SetActive(true);
+        return true;
+    }
+
+    private static Color GetProceduralWireColor(WireBody wire)
+    {
+        switch (wire != null ? wire.wireColor : WireColor.Any)
+        {
+            case WireColor.Red: return new Color(0.82f, 0.025f, 0.035f, 1f);
+            case WireColor.Black: return new Color(0.035f, 0.04f, 0.05f, 1f);
+            case WireColor.Yellow: return new Color(0.38f, 0.145f, 0f, 1f);
+            case WireColor.Green: return new Color(0.02f, 0.55f, 0.14f, 1f);
+            case WireColor.Blue: return new Color(0.05f, 0.25f, 0.85f, 1f);
+            default: return Color.white;
+        }
+    }
+
+    private void SetLegacyWirePresentation(WireBody wire, bool visible)
+    {
+        if (wire == null)
+            return;
+
+        wire.SetPresentationVisible(visible);
+        SetPlugPresentation(wire.plugA, visible);
+        SetPlugPresentation(wire.plugB, visible);
+    }
+
+    private void SetPlugPresentation(WirePlug plug, bool visible)
+    {
+        if (plug == null)
+            return;
+
+        foreach (Renderer renderer in plug.GetComponentsInChildren<Renderer>(true))
+            renderer.enabled = visible;
+        foreach (Collider collider in plug.GetComponentsInChildren<Collider>(true))
+            collider.enabled = !connectBySocketClick && visible;
+        plug.enabled = !connectBySocketClick && visible;
+    }
+
+    private static bool WireUsesSocket(WireBody wire, string socketId)
+    {
+        return wire != null &&
+            (string.Equals(wire.correctSocketA, socketId, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(wire.correctSocketB, socketId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool PairMatchesWire(WireBody wire, string firstId, string secondId)
+    {
+        return wire != null &&
+            ((string.Equals(wire.correctSocketA, firstId, StringComparison.OrdinalIgnoreCase) &&
+              string.Equals(wire.correctSocketB, secondId, StringComparison.OrdinalIgnoreCase)) ||
+             (string.Equals(wire.correctSocketA, secondId, StringComparison.OrdinalIgnoreCase) &&
+              string.Equals(wire.correctSocketB, firstId, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static void ConnectWireToSockets(WireBody wire, SocketPoint first, SocketPoint second)
+    {
+        SocketPoint socketA = string.Equals(
+            wire.correctSocketA, first.socketID, StringComparison.OrdinalIgnoreCase)
+            ? first
+            : second;
+        SocketPoint socketB = socketA == first ? second : first;
+        AttachPlugToSocket(wire.plugA, socketA, wire);
+        AttachPlugToSocket(wire.plugB, socketB, wire);
+        wire.RefreshConnectionState(true);
+    }
+
+    private static void AttachPlugToSocket(WirePlug plug, SocketPoint socket, WireBody wire)
+    {
+        if (plug == null || socket == null)
+            return;
+
+        plug.parentWire = wire;
+        plug.connectedSocket = socket;
+        plug.isSnapped = true;
+        plug.transform.position = socket.transform.position;
+        plug.transform.rotation = socket.transform.rotation;
+        socket.isOccupied = true;
+    }
+
+    private void ClearSelectedSocket()
+    {
+        if (selectedSocket != null)
+            selectedSocket.SetClickSelection(false);
+        selectedSocket = null;
+    }
+
+    private void ShowClickInstruction(string message)
+    {
+        // Phan thao tac chi hien danh sach cap socket; huong dan chi tiet nam o trang rieng.
+    }
+
+    private void SetStepInteractionEnabled(GameObject stepRoot, bool enabled)
     {
         if (stepRoot == null)
             return;
 
         foreach (WirePlug plug in stepRoot.GetComponentsInChildren<WirePlug>(true))
         {
-            if (plug != null)
-                plug.enabled = enabled;
+            if (plug == null)
+                continue;
+
+            plug.enabled = enabled && !connectBySocketClick;
+            if (connectBySocketClick)
+            {
+                foreach (Collider collider in plug.GetComponentsInChildren<Collider>(true))
+                    collider.enabled = false;
+            }
         }
     }
 
@@ -554,6 +938,14 @@ public class CircuitManager : MonoBehaviour
         Scene hmiScene = SceneManager.GetSceneByName(hmiSceneName);
         if (hmiScene.isLoaded || hmiSceneLoading)
             return;
+
+        // The runtime dashboard is self-contained. Only load the optional legacy
+        // HMI scene when it is actually available in the active build profile.
+        if (string.IsNullOrWhiteSpace(hmiSceneName) ||
+            !Application.CanStreamedLevelBeLoaded(hmiSceneName))
+        {
+            return;
+        }
 
         AsyncOperation loadOperation = SceneManager.LoadSceneAsync(
             hmiSceneName,
@@ -761,6 +1153,7 @@ public class CircuitManager : MonoBehaviour
 
         pendingStepCompletion = false;
         string wireNumbers = string.Join(", ", wrongWires.Select(GetWireDisplayName));
+        string wireInstructions = string.Join("\n", wrongWires.Select(GetWrongWireInstruction));
 
         Color errorColor = new Color(0.78f, 0.08f, 0.1f, 1f);
         popupIconBackground.color = errorColor;
@@ -773,12 +1166,54 @@ public class CircuitManager : MonoBehaviour
         popupStatusText.fontStyle = FontStyles.Normal;
         popupStatusText.text =
             "Gi\u1EAFc c\u1EAFm ch\u01B0a \u0111\u00FAng. Vui l\u00F2ng c\u1EAFm l\u1EA1i theo h\u01B0\u1EDBng d\u1EABn.";
-        popupMessageText.color = errorColor;
-        popupMessageText.text = "D\u00E2y c\u1EAFm sai: " + wireNumbers;
+        popupMessageText.color = new Color(0.12f, 0.14f, 0.18f, 1f);
+        popupMessageText.text = wireInstructions;
         popupButtonText.text = "Th\u1EED l\u1EA1i";
 
         ShowPopup();
         Debug.LogWarning($"[Circuit] Buoc {currentStepIndex + 1} co day sai: {wireNumbers}.");
+    }
+
+    private void ShowWrongSocketPairPopup(
+        SocketPoint firstSocket,
+        SocketPoint secondSocket,
+        List<WireBody> currentWires)
+    {
+        string firstId = firstSocket != null ? firstSocket.socketID : "?";
+        string secondId = secondSocket != null ? secondSocket.socketID : "?";
+        if (stepResultPopupRoot == null)
+        {
+            Debug.LogWarning($"[Circuit] Cap socket sai: {firstId} - {secondId}.");
+            return;
+        }
+
+        List<WireBody> expectedWires = currentWires
+            .Where(wire => !wire.isCorrect && WireUsesSocket(wire, firstId))
+            .ToList();
+        string instructions = expectedWires.Count > 0
+            ? string.Join("\n", expectedWires.Select(GetWrongWireInstruction))
+            : "H\u00E3y xem l\u1EA1i c\u1EB7p socket trong ph\u1EA7n h\u01B0\u1EDBng d\u1EABn.";
+
+        pendingStepCompletion = false;
+        Color errorColor = new Color(0.78f, 0.08f, 0.1f, 1f);
+        popupIconBackground.color = errorColor;
+        popupIconText.text = "!";
+        popupIconText.color = errorColor;
+        popupIconText.gameObject.SetActive(true);
+        foreach (Image checkGraphic in popupCheckGraphics)
+            checkGraphic.gameObject.SetActive(false);
+
+        popupStatusText.color = new Color(0.24f, 0.27f, 0.34f, 1f);
+        popupStatusText.fontStyle = FontStyles.Normal;
+        popupStatusText.text =
+            $"C\u1EB7p <b>{firstId} - {secondId}</b> ch\u01B0a \u0111\u00FAng. Vui l\u00F2ng n\u1ED1i l\u1EA1i.";
+        popupMessageText.color = new Color(0.12f, 0.14f, 0.18f, 1f);
+        popupMessageText.text = instructions;
+        popupButtonText.text = "Th\u1EED l\u1EA1i";
+
+        ShowPopup();
+        Debug.LogWarning(
+            $"[Circuit] Buoc {currentStepIndex + 1}: cap socket sai {firstId} - {secondId}.");
     }
 
     private void ShowStepCompletedPopup()
@@ -851,6 +1286,33 @@ public class CircuitManager : MonoBehaviour
         }
 
         return $"Dây {source}";
+    }
+
+    private static string GetWrongWireInstruction(WireBody wire)
+    {
+        string socketA = GetExpectedSocketName(wire != null ? wire.correctSocketA : null);
+        string socketB = GetExpectedSocketName(wire != null ? wire.correctSocketB : null);
+        string color = GetWireTextColor(wire != null ? wire.wireColor : WireColor.Any);
+
+        return $"<color={color}><b>{GetWireDisplayName(wire)}:</b> {socketA} - {socketB}</color>";
+    }
+
+    private static string GetExpectedSocketName(string socketName)
+    {
+        return string.IsNullOrWhiteSpace(socketName) ? "?" : socketName.Trim();
+    }
+
+    private static string GetWireTextColor(WireColor wireColor)
+    {
+        switch (wireColor)
+        {
+            case WireColor.Red: return "#C5161D";
+            case WireColor.Yellow: return "#8B5A00";
+            case WireColor.Black: return "#202124";
+            case WireColor.Green: return "#15803D";
+            case WireColor.Blue: return "#1D5FBF";
+            default: return "#C5161D";
+        }
     }
 
     private void AutoFindStepRoots()
@@ -1217,11 +1679,13 @@ public class CircuitManager : MonoBehaviour
             new Color(0.78f, 0.08f, 0.1f, 1f),
             TextAlignmentOptions.Center);
         popupMessageText.enableAutoSizing = true;
-        popupMessageText.fontSizeMin = 18f;
-        popupMessageText.fontSizeMax = 24f;
+        popupMessageText.fontSizeMin = 15f;
+        popupMessageText.fontSizeMax = 23f;
+        popupMessageText.richText = true;
         popupMessageText.enableWordWrapping = false;
         popupMessageText.overflowMode = TextOverflowModes.Overflow;
-        SetCenteredRect(popupMessageText.rectTransform, new Vector2(800f, 44f), new Vector2(0f, -28f));
+        popupMessageText.lineSpacing = -8f;
+        SetCenteredRect(popupMessageText.rectTransform, new Vector2(800f, 104f), new Vector2(0f, -44f));
 
         GameObject buttonObject = CreatePopupImage(
             card.transform,
@@ -1230,7 +1694,7 @@ public class CircuitManager : MonoBehaviour
         Image buttonImage = buttonObject.GetComponent<Image>();
         buttonImage.sprite = GetRoundedRectangleSprite();
         buttonImage.type = Image.Type.Sliced;
-        SetCenteredRect(buttonObject.GetComponent<RectTransform>(), new Vector2(160f, 58f), new Vector2(0f, -108f));
+        SetCenteredRect(buttonObject.GetComponent<RectTransform>(), new Vector2(160f, 58f), new Vector2(0f, -128f));
 
         Button okButton = buttonObject.AddComponent<Button>();
         ColorBlock buttonColors = okButton.colors;
@@ -1269,7 +1733,8 @@ public class CircuitManager : MonoBehaviour
             "PracticalWorkspace_Canvas",
             typeof(RectTransform),
             typeof(Canvas),
-            typeof(CanvasScaler));
+            typeof(CanvasScaler),
+            typeof(GraphicRaycaster));
 
         Canvas workspaceCanvas = practicalWorkspaceRoot.GetComponent<Canvas>();
         workspaceCanvas.renderMode = RenderMode.ScreenSpaceCamera;
@@ -1299,7 +1764,7 @@ public class CircuitManager : MonoBehaviour
             practicalWorkspaceRoot.transform,
             "ModelPanel",
             new Vector2(525f, 144f),
-            new Vector2(942f, 804f),
+            new Vector2(1348f, 804f),
             cardBorder,
             cardShadow);
 
@@ -1329,21 +1794,6 @@ public class CircuitManager : MonoBehaviour
         guideDivider.GetComponent<Image>().raycastTarget = false;
         SetTopLeftRect(guideDivider.GetComponent<RectTransform>(), new Vector2(354f, 2f), new Vector2(44f, 94f));
 
-        practicalInstructionText = CreatePopupText(
-            guideCard.transform,
-            "Instruction",
-            string.Empty,
-            29f,
-            FontStyles.Normal,
-            new Color(0.34f, 0.38f, 0.44f, 1f),
-            TextAlignmentOptions.TopLeft);
-        practicalInstructionText.enableWordWrapping = true;
-        practicalInstructionText.lineSpacing = 5f;
-        SetTopLeftRect(
-            practicalInstructionText.rectTransform,
-            new Vector2(354f, 130f),
-            new Vector2(44f, 122f));
-
         practicalWireGuideText = CreatePopupText(
             guideCard.transform,
             "WireGuide",
@@ -1357,91 +1807,31 @@ public class CircuitManager : MonoBehaviour
         practicalWireGuideText.lineSpacing = 10f;
         SetTopLeftRect(
             practicalWireGuideText.rectTransform,
-            new Vector2(342f, 250f),
-            new Vector2(58f, 283f));
-
-        GameObject wireCard = CreateWorkspaceCard(
-            practicalWorkspaceRoot.transform,
-            "WireCard",
-            new Vector2(1492f, 144f),
-            new Vector2(381f, 804f),
-            cardBorder,
-            cardShadow);
-
-        CreateWireIcon(wireCard.transform, new Vector2(44f, 47f), red);
-        TextMeshProUGUI wireHeading = CreatePopupText(
-            wireCard.transform,
-            "Heading",
-            "B\u1ED9 d\u00E2y",
-            36f,
-            FontStyles.Bold,
-            new Color(0.16f, 0.17f, 0.19f, 1f),
-            TextAlignmentOptions.MidlineLeft);
-        SetTopLeftRect(wireHeading.rectTransform, new Vector2(230f, 58f), new Vector2(86f, 31f));
-
-        GameObject wireDivider = CreatePopupImage(
-            wireCard.transform,
-            "Divider",
-            new Color(0.87f, 0.88f, 0.9f, 1f));
-        wireDivider.GetComponent<Image>().raycastTarget = false;
-        SetTopLeftRect(wireDivider.GetComponent<RectTransform>(), new Vector2(292f, 2f), new Vector2(44f, 94f));
+            new Vector2(342f, 390f),
+            new Vector2(58f, 122f));
 
         practicalWireRows.Clear();
         practicalWireRowNumbers.Clear();
         practicalWireRowBackgrounds.Clear();
-        for (int i = 0; i < WireLayoutSlotCount; i++)
-        {
-            GameObject row = CreatePopupImage(
-                wireCard.transform,
-                $"WireRow_{i + 1}",
-                new Color(0.99f, 0.98f, 0.98f, 0.92f));
-            Image rowImage = row.GetComponent<Image>();
-            rowImage.sprite = GetRoundedRectangleSprite();
-            rowImage.type = Image.Type.Sliced;
-            rowImage.raycastTarget = false;
-            SetTopLeftRect(
-                row.GetComponent<RectTransform>(),
-                new Vector2(292f, 99f),
-                new Vector2(44f, 117f + i * 112f));
 
-            GameObject rowBorder = CreatePopupImage(
-                row.transform,
-                "Border",
-                new Color(0.86f, 0.87f, 0.89f, 1f));
-            Image rowBorderImage = rowBorder.GetComponent<Image>();
-            rowBorderImage.sprite = GetRoundedRectangleSprite();
-            rowBorderImage.type = Image.Type.Sliced;
-            rowBorderImage.raycastTarget = false;
-            StretchRect(rowBorder.GetComponent<RectTransform>());
-            rowBorder.transform.SetAsFirstSibling();
-
-            GameObject rowSurface = CreatePopupImage(
-                row.transform,
-                "Surface",
-                rowImage.color);
-            Image rowSurfaceImage = rowSurface.GetComponent<Image>();
-            rowSurfaceImage.sprite = GetRoundedRectangleSprite();
-            rowSurfaceImage.type = Image.Type.Sliced;
-            rowSurfaceImage.raycastTarget = false;
-            SetTopLeftRect(
-                rowSurface.GetComponent<RectTransform>(),
-                new Vector2(288f, 95f),
-                new Vector2(2f, 2f));
-
-            TextMeshProUGUI number = CreatePopupText(
-                row.transform,
-                "Number",
-                (i + 1).ToString(),
-                31f,
-                FontStyles.Normal,
-                new Color(0.4f, 0.43f, 0.48f, 1f),
-                TextAlignmentOptions.Center);
-            SetTopLeftRect(number.rectTransform, new Vector2(52f, 99f), new Vector2(10f, 0f));
-
-            practicalWireRows.Add(row);
-            practicalWireRowNumbers.Add(number);
-            practicalWireRowBackgrounds.Add(rowSurfaceImage);
-        }
+        previousStepButton = CreatePracticalActionButton(
+            practicalWorkspaceRoot.transform,
+            "PreviousStepButton",
+            "\u2190  B\u01B0\u1EDBc tr\u01B0\u1EDBc",
+            new Vector2(52f, 710f),
+            new Vector2(210f, 70f),
+            ShowPreviousPracticalStep);
+        previousStepButtonShadow = practicalWorkspaceRoot.transform
+            .Find("PreviousStepButton_Shadow") as RectTransform;
+        resetStepButton = CreatePracticalActionButton(
+            practicalWorkspaceRoot.transform,
+            "ResetStepButton",
+            "L\u00E0m l\u1EA1i",
+            new Vector2(282f, 710f),
+            new Vector2(210f, 70f),
+            ResetVisibleStep);
+        resetStepButtonShadow = practicalWorkspaceRoot.transform
+            .Find("ResetStepButton_Shadow") as RectTransform;
 
         CreatePracticalWorkspaceMasks(pageBackground);
         UpdatePracticalWorkspaceLayout();
@@ -1476,6 +1866,59 @@ public class CircuitManager : MonoBehaviour
         cardImage.raycastTarget = false;
         SetTopLeftRect(card.GetComponent<RectTransform>(), size, position);
         return card;
+    }
+
+    private Button CreatePracticalActionButton(
+        Transform parent,
+        string objectName,
+        string label,
+        Vector2 position,
+        Vector2 size,
+        Action callback)
+    {
+        GameObject shadow = CreatePopupImage(parent, objectName + "_Shadow", new Color(0.1f, 0.12f, 0.16f, 0.12f));
+        Image shadowImage = shadow.GetComponent<Image>();
+        shadowImage.sprite = GetRoundedRectangleSprite();
+        shadowImage.type = Image.Type.Sliced;
+        shadowImage.raycastTarget = false;
+        SetTopLeftRect(shadow.GetComponent<RectTransform>(), size, position + new Vector2(0f, 4f));
+
+        GameObject buttonObject = CreatePopupImage(parent, objectName, Color.white);
+        Image buttonImage = buttonObject.GetComponent<Image>();
+        buttonImage.sprite = GetRoundedRectangleSprite();
+        buttonImage.type = Image.Type.Sliced;
+        SetTopLeftRect(buttonObject.GetComponent<RectTransform>(), size, position);
+
+        Button button = buttonObject.AddComponent<Button>();
+        button.targetGraphic = buttonImage;
+        button.onClick.AddListener(() => InvokePracticalAction(callback));
+        ColorBlock colors = button.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(0.95f, 0.97f, 1f, 1f);
+        colors.pressedColor = new Color(0.88f, 0.92f, 0.98f, 1f);
+        colors.selectedColor = colors.normalColor;
+        colors.disabledColor = new Color(0.92f, 0.92f, 0.92f, 0.65f);
+        button.colors = colors;
+
+        TextMeshProUGUI text = CreatePopupText(
+            buttonObject.transform,
+            "Label",
+            label,
+            24f,
+            FontStyles.Normal,
+            new Color(0.25f, 0.28f, 0.32f, 1f),
+            TextAlignmentOptions.Center);
+        StretchRect(text.rectTransform);
+        return button;
+    }
+
+    private void InvokePracticalAction(Action callback)
+    {
+        if (callback == null || lastPracticalActionFrame == Time.frameCount)
+            return;
+
+        lastPracticalActionFrame = Time.frameCount;
+        callback.Invoke();
     }
 
     private void CreatePracticalWorkspaceMasks(Color backgroundColor)
@@ -1585,13 +2028,11 @@ public class CircuitManager : MonoBehaviour
         if (practicalWorkspaceMaskRoot != null)
             practicalWorkspaceMaskRoot.SetActive(showWorkspace);
 
-        if (!showWorkspace || practicalInstructionText == null || practicalWireGuideText == null)
+        if (!showWorkspace || practicalWireGuideText == null)
+        {
+            UpdatePracticalActionButtons();
             return;
-
-        practicalInstructionText.text =
-            "K\u00E9o th\u1EA3 c\u00E1c \u0111\u1EA7u d\u00E2y n\u1ED1i\n" +
-            "v\u00E0o c\u00E1c gi\u1EAFc c\u1EAFm tr\u00EAn\n" +
-            "b\u1EA3ng \u0111i\u1EC1u khi\u1EC3n:";
+        }
 
         List<WireBody> wires = visibleStepIndex < stepRoots.Count
             ? GetStepWires(stepRoots[visibleStepIndex])
@@ -1612,6 +2053,118 @@ public class CircuitManager : MonoBehaviour
 
             practicalWireRowNumbers[i].text = GetWireNumber(wires[i]).ToString();
             practicalWireRowBackgrounds[i].color = GetWireRowColor(wires[i]);
+        }
+
+        UpdatePracticalActionButtons();
+    }
+
+    private void ShowPreviousPracticalStep()
+    {
+        if (visibleStepIndex <= 0 || popupVisible)
+            return;
+
+        ShowStepFromNavigation(visibleStepIndex - 1);
+    }
+
+    private void ResetVisibleStep()
+    {
+        if (!connectBySocketClick || popupVisible || visibleStepIndex != currentStepIndex ||
+            currentStepIndex < 0 || currentStepIndex >= stepRoots.Count)
+        {
+            return;
+        }
+
+        ClearSelectedSocket();
+        foreach (WireBody wire in GetStepWires(stepRoots[currentStepIndex]))
+        {
+            DisconnectPlug(wire.plugA);
+            DisconnectPlug(wire.plugB);
+            wire.isFullyConnected = false;
+            wire.isCorrect = false;
+            SetLegacyWirePresentation(wire, false);
+        }
+
+        RecalculateSocketOccupancy();
+        completedWires = CountCompletedPreviousSteps();
+        RefreshClickToConnectPresentation();
+        UpdatePracticalWorkspaceLayout();
+        Debug.Log($"[Circuit] Da lam lai Buoc {currentStepIndex + 1}.");
+    }
+
+    private static void DisconnectPlug(WirePlug plug)
+    {
+        if (plug == null)
+            return;
+
+        plug.connectedSocket = null;
+        plug.isSnapped = false;
+    }
+
+    private void RecalculateSocketOccupancy()
+    {
+        foreach (SocketPoint socket in Resources.FindObjectsOfTypeAll<SocketPoint>())
+        {
+            if (socket != null && socket.gameObject.scene.IsValid())
+                socket.isOccupied = false;
+        }
+
+        foreach (GameObject stepRoot in stepRoots)
+        {
+            foreach (WireBody wire in GetStepWires(stepRoot))
+            {
+                if (wire.plugA != null && wire.plugA.isSnapped && wire.plugA.connectedSocket != null)
+                    wire.plugA.connectedSocket.isOccupied = true;
+                if (wire.plugB != null && wire.plugB.isSnapped && wire.plugB.connectedSocket != null)
+                    wire.plugB.connectedSocket.isOccupied = true;
+            }
+        }
+    }
+
+    private void UpdatePracticalActionButtons()
+    {
+        bool showPrevious = visibleStepIndex > 0 && visibleStepIndex < HmiStepIndex;
+        if (previousStepButton != null)
+        {
+            previousStepButton.gameObject.SetActive(showPrevious);
+            previousStepButton.interactable = !popupVisible && visibleStepIndex > 0;
+        }
+        if (previousStepButtonShadow != null)
+            previousStepButtonShadow.gameObject.SetActive(showPrevious);
+
+        if (resetStepButton != null)
+        {
+            RectTransform resetRect = resetStepButton.transform as RectTransform;
+            if (resetRect != null)
+                resetRect.anchoredPosition = new Vector2(showPrevious ? 282f : 52f, -710f);
+            resetStepButton.interactable = !popupVisible && !systemUnlocked &&
+                visibleStepIndex == currentStepIndex && currentStepIndex < stepRoots.Count;
+        }
+        if (resetStepButtonShadow != null)
+            resetStepButtonShadow.anchoredPosition = new Vector2(showPrevious ? 282f : 52f, -714f);
+    }
+
+    private void ApplyExtraBoldPracticalText()
+    {
+        List<GameObject> textRoots = new List<GameObject>
+        {
+            practicalWorkspaceRoot,
+            practicalWorkspaceMaskRoot,
+            stepNavigationRoot,
+            guideReturnRoot,
+            stepResultPopupRoot
+        };
+        textRoots.AddRange(guideRoots.Where(root => root != null));
+
+        foreach (GameObject root in textRoots)
+        {
+            if (root == null)
+                continue;
+
+            foreach (TextMeshProUGUI text in root.GetComponentsInChildren<TextMeshProUGUI>(true))
+            {
+                text.fontStyle = FontStyles.Bold;
+                text.fontWeight = FontWeight.Black;
+            }
         }
     }
 
@@ -1640,7 +2193,7 @@ public class CircuitManager : MonoBehaviour
             case WireColor.Red:
                 return new Color(0.82f, 0.12f, 0.15f, 1f);
             case WireColor.Yellow:
-                return new Color(0.86f, 0.58f, 0.03f, 1f);
+                return new Color(0.62f, 0.40f, 0.0f, 1f);
             case WireColor.Green:
                 return new Color(0.13f, 0.55f, 0.32f, 1f);
             case WireColor.Blue:
@@ -1850,7 +2403,7 @@ public class CircuitManager : MonoBehaviour
         GameObject buttonObject = CreatePopupImage(
             guideReturnRoot.transform,
             "GuideReturnButton",
-            Color.white);
+            new Color(0.79f, 0.08f, 0.09f, 1f));
         Image buttonImage = buttonObject.GetComponent<Image>();
         buttonImage.sprite = GetRoundedRectangleSprite();
         buttonImage.type = Image.Type.Sliced;
@@ -1861,7 +2414,7 @@ public class CircuitManager : MonoBehaviour
         buttonRect.anchorMax = new Vector2(0f, 1f);
         buttonRect.pivot = new Vector2(0f, 1f);
         buttonRect.anchoredPosition = new Vector2(52f, -992f);
-        buttonRect.sizeDelta = new Vector2(237f, 71f);
+        buttonRect.sizeDelta = new Vector2(190f, 71f);
 
         Button button = buttonObject.AddComponent<Button>();
         button.targetGraphic = buttonImage;
@@ -1869,24 +2422,24 @@ public class CircuitManager : MonoBehaviour
         button.onClick.AddListener(ReturnToGuidePage);
 
         ColorBlock colors = button.colors;
-        colors.normalColor = new Color(1f, 1f, 1f, 0.95f);
-        colors.highlightedColor = new Color(0.94f, 0.97f, 1f, 1f);
-        colors.pressedColor = new Color(0.86f, 0.92f, 0.99f, 1f);
+        colors.normalColor = new Color(0.79f, 0.08f, 0.09f, 1f);
+        colors.highlightedColor = new Color(0.9f, 0.11f, 0.12f, 1f);
+        colors.pressedColor = new Color(0.66f, 0.05f, 0.06f, 1f);
         colors.selectedColor = colors.normalColor;
         button.colors = colors;
 
         TextMeshProUGUI buttonText = CreatePopupText(
             buttonObject.transform,
             "Label",
-            "\u2190  H\u01B0\u1EDBng d\u1EABn",
-            23f,
-            FontStyles.Normal,
-            new Color(0.38f, 0.43f, 0.5f, 1f),
+            "\u2190  Quay l\u1EA1i",
+            24f,
+            FontStyles.Bold,
+            Color.white,
             TextAlignmentOptions.Center);
         buttonText.enableAutoSizing = true;
         buttonText.fontSizeMin = 17f;
         buttonText.fontSizeMax = 23f;
-        SetCenteredRect(buttonText.rectTransform, new Vector2(213f, 55f), Vector2.zero);
+        SetCenteredRect(buttonText.rectTransform, new Vector2(170f, 55f), Vector2.zero);
 
         UpdateGuideReturnButton();
     }
@@ -2061,15 +2614,15 @@ public class CircuitManager : MonoBehaviour
             stepNavigationItems.Count != NavigationStepCount)
             return;
 
-        Color selectedBackground = Color.white;
+        Color selectedBackground = new Color(0.93f, 0.95f, 1f, 1f);
         Color normalBackground = new Color(1f, 1f, 1f, 1f);
         Color lockedBackground = new Color(0.99f, 0.99f, 0.99f, 1f);
-        Color selectedText = new Color(0.82f, 0.12f, 0.15f, 1f);
+        Color selectedText = new Color(0.08f, 0.24f, 0.59f, 1f);
         Color normalTitle = new Color(0.38f, 0.41f, 0.46f, 1f);
         Color normalDescription = new Color(0.5f, 0.57f, 0.66f, 1f);
         Color lockedText = new Color(0.48f, 0.51f, 0.56f, 1f);
         Color normalBorder = new Color(0.84f, 0.86f, 0.89f, 1f);
-        Color selectedBorder = new Color(0.9f, 0.12f, 0.16f, 1f);
+        Color selectedBorder = new Color(0.78f, 0.84f, 0.96f, 1f);
         Color lockedBorder = new Color(0.88f, 0.89f, 0.91f, 1f);
         Color shadowColor = new Color(0.12f, 0.15f, 0.2f, 0.1f);
 
@@ -2115,7 +2668,7 @@ public class CircuitManager : MonoBehaviour
 
             if (item.Shadow != null)
                 item.Shadow.color = isSelected
-                    ? new Color(0.5f, 0.08f, 0.1f, 0.14f)
+                    ? new Color(0.16f, 0.28f, 0.55f, 0.12f)
                     : shadowColor;
 
             Color titleColor = !isUnlocked
@@ -2248,7 +2801,8 @@ public class CircuitManager : MonoBehaviour
         TextMeshProUGUI text = gameObject.GetComponent<TextMeshProUGUI>();
         text.text = value;
         text.fontSize = fontSize;
-        text.fontStyle = fontStyle;
+        text.fontStyle = FontStyles.Bold;
+        text.fontWeight = FontWeight.Black;
         text.color = color;
         text.alignment = alignment;
         text.raycastTarget = false;

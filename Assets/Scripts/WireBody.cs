@@ -17,7 +17,7 @@ public class WireBody : MonoBehaviour
     [Range(0.002f, 0.02f)]
     public float wireWidth = 0.005f;
     [Range(0f, 0.3f)]
-    public float sagAmount = 0.05f;
+    public float sagAmount = 0f;
     [Range(2, 20)]
     public int curveSegments = 8;
 
@@ -30,11 +30,13 @@ public class WireBody : MonoBehaviour
     private Vector3 lastP0;
     private Vector3 lastP3;
     private MeshRenderer meshRend;
+    private bool presentationVisible = true;
     private const int WireOverlayQueue = 5000;
     private static readonly int ColorProperty = Shader.PropertyToID("_Color");
 
     void Start()
     {
+        sagAmount = 0f;
         RebindPlugs();
 
         meshRend = GetComponent<MeshRenderer>();
@@ -56,7 +58,7 @@ public class WireBody : MonoBehaviour
         lr.shadowCastingMode = ShadowCastingMode.Off;
         lr.receiveShadows = false;
         lr.sortingOrder = WireOverlayQueue;
-        lr.enabled = plugA != null && plugB != null;
+        lr.enabled = presentationVisible && plugA != null && plugB != null;
 
         SetWireMaterial();
         ForceRefreshLine();
@@ -89,6 +91,12 @@ public class WireBody : MonoBehaviour
     {
         if (lr == null)
             return;
+
+        if (!presentationVisible)
+        {
+            lr.enabled = false;
+            return;
+        }
 
         if (plugA == null || plugB == null)
         {
@@ -173,6 +181,20 @@ public class WireBody : MonoBehaviour
         lastP0 = plugA.transform.position;
         lastP3 = plugB.transform.position;
         UpdateLinePositions();
+    }
+
+    public void SetPresentationVisible(bool visible)
+    {
+        presentationVisible = visible;
+        if (lr == null)
+            lr = GetComponent<LineRenderer>();
+
+        if (lr != null)
+        {
+            lr.enabled = visible && plugA != null && plugB != null;
+            if (lr.enabled)
+                ForceRefreshLine();
+        }
     }
 
     public void CheckConnection()

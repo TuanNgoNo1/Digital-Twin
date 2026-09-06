@@ -65,9 +65,24 @@ public class PageTwoPartsController : MonoBehaviour
     private GameObject pageHeader;
     private GameObject pageTitle;
     private GameObject pageTitleIcon;
+    private RectTransform modelViewport;
+    private RawImage previewImage;
+    private GameObject overviewFrame;
+    private GameObject overviewBadge;
     private GameObject detailIcon;
     private GameObject detailDivider;
-    private Camera sceneCamera;
+    private GameObject detailOverlayRoot;
+    private CanvasGroup backgroundCanvasGroup;
+    private Button modalBackdropButton;
+    private Button previousPartButton;
+    private Button nextPartButton;
+    private TextMeshProUGUI previousPartLabel;
+    private TextMeshProUGUI nextPartLabel;
+    private RawImage modalPreviewImage;
+    private GameObject[] modalPartIcons;
+    private Image[] modalDots;
+    private RenderTexture previewTexture;
+    private RenderTexture overviewSnapshotTexture;
     private Bounds fullModelBounds;
     private Coroutine transition;
     private Vector3 cameraStartPosition;
@@ -86,6 +101,7 @@ public class PageTwoPartsController : MonoBehaviour
     private float orbitPitch = 8f;
     private bool isOrbiting;
     private bool isShowingDetails;
+    private int selectedPartIndex = -1;
     private Bounds activeViewBounds;
     private int lastScreenWidth;
     private int lastScreenHeight;
@@ -113,6 +129,7 @@ public class PageTwoPartsController : MonoBehaviour
         CreateDemoWires();
         fullModelBounds = CalculateBounds(new[] { modelRoot });
         CreatePreviewCamera();
+        ConfigureModelViewport(false);
         FocusImmediate(fullModelBounds, 1.18f);
         previewCamera.enabled = gameObject.activeInHierarchy;
         lastScreenWidth = Screen.width;
@@ -153,8 +170,11 @@ public class PageTwoPartsController : MonoBehaviour
     {
         if (previewCamera != null)
         {
+            previewCamera.targetTexture = null;
             Destroy(previewCamera.gameObject);
         }
+        ReleaseOverviewSnapshot();
+        ReleasePreviewTexture();
 
         ClearHighlight();
         if (highlightMaterial != null)
@@ -181,10 +201,18 @@ public class PageTwoPartsController : MonoBehaviour
             return;
         }
 
+        backgroundCanvasGroup = content.GetComponent<CanvasGroup>();
+        if (backgroundCanvasGroup == null)
+        {
+            backgroundCanvasGroup = content.gameObject.AddComponent<CanvasGroup>();
+        }
+
         buttonList ??= content.Find("PartButtonList") as RectTransform;
-        selectedLabel ??= content.Find("SelectedPartLabel")?.GetComponent<TextMeshProUGUI>();
-        descriptionText ??= content.Find("PartDescriptionText")?.GetComponent<TextMeshProUGUI>();
-        listButton ??= content.Find("ShowPartListButton")?.GetComponent<Button>();
+        Transform overlay = content.Find("DetailOverlayRoot");
+        Transform modalCard = overlay?.Find("DetailModalCard");
+        selectedLabel ??= modalCard?.Find("SelectedPartLabel")?.GetComponent<TextMeshProUGUI>();
+        descriptionText ??= modalCard?.Find("DescriptionPanel/PartDescriptionText")?.GetComponent<TextMeshProUGUI>();
+        listButton ??= overlay?.Find("ShowPartListButton")?.GetComponent<Button>();
         Transform obsoleteViewportCover = content.Find("ModelViewportBorder");
         if (obsoleteViewportCover != null)
         {
@@ -203,9 +231,44 @@ public class PageTwoPartsController : MonoBehaviour
         pageHeader = content.Find("PageTwoHeader")?.gameObject;
         pageTitle = content.Find("PageTwoTitle")?.gameObject;
         pageTitleIcon = content.Find("PageTwoTitleIcon")?.gameObject;
+        modelViewport = content.Find("ModelViewport") as RectTransform;
+        previewImage = modelViewport?.Find("Preview")?.GetComponent<RawImage>();
+        overviewFrame = content.Find("OverviewFrame")?.gameObject;
+        overviewBadge = content.Find("OverviewBadge")?.gameObject;
         detailIcon = content.Find("DetailPartIcon")?.gameObject;
         detailDivider = content.Find("DetailDivider")?.gameObject;
-        sceneCamera = Camera.main;
+        detailOverlayRoot = overlay?.gameObject;
+        if (detailOverlayRoot != null)
+        {
+            CanvasGroup overlayGroup = detailOverlayRoot.GetComponent<CanvasGroup>();
+            if (overlayGroup == null)
+            {
+                overlayGroup = detailOverlayRoot.AddComponent<CanvasGroup>();
+            }
+            overlayGroup.ignoreParentGroups = true;
+        }
+        modalBackdropButton = overlay?.Find("DimBackdrop")?.GetComponent<Button>();
+        previousPartButton = modalCard?.Find("PreviousPartButton")?.GetComponent<Button>();
+        nextPartButton = modalCard?.Find("NextPartButton")?.GetComponent<Button>();
+        EnsureFullRectRaycast(previousPartButton);
+        EnsureFullRectRaycast(nextPartButton);
+        previousPartLabel = previousPartButton?.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
+        nextPartLabel = nextPartButton?.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
+        modalPreviewImage = modalCard?.Find("ModalPreviewFrame/ModalPreview")?.GetComponent<RawImage>();
+
+        modalPartIcons = new GameObject[parts.Length];
+        Transform iconPlate = modalCard?.Find("DetailIconPlate");
+        for (int i = 0; i < modalPartIcons.Length; i++)
+        {
+            modalPartIcons[i] = iconPlate?.Find("ModalPartIcon_" + i)?.gameObject;
+        }
+
+        modalDots = new Image[parts.Length];
+        Transform dots = modalCard?.Find("PageDots");
+        for (int i = 0; i < modalDots.Length; i++)
+        {
+            modalDots[i] = dots?.Find("Dot_" + i)?.GetComponent<Image>();
+        }
     }
 
     private void BindInterfaceEvents()
@@ -220,6 +283,9 @@ public class PageTwoPartsController : MonoBehaviour
             partButtons[i].onClick.AddListener(() => SelectPart(index, partButtons[index].transform as RectTransform));
         }
         listButton?.onClick.AddListener(ShowPartList);
+        modalBackdropButton?.onClick.AddListener(ShowPartList);
+        previousPartButton?.onClick.AddListener(() => SelectAdjacentPart(-1));
+        nextPartButton?.onClick.AddListener(() => SelectAdjacentPart(1));
     }
 
     private Transform FindModelRoot()
@@ -344,30 +410,36 @@ public class PageTwoPartsController : MonoBehaviour
         }
 
         List<Transform> targets = FindNamedTransforms(parts[index].TransformNames);
-        if (targets.Count == 0)
+        bool hasTarget = targets.Count > 0;
+        if (!hasTarget)
         {
             Debug.LogWarning($"[PageTwoPartsController] Không tìm thấy bộ phận: {parts[index].Label}");
-            return;
         }
 
+        if (!isShowingDetails)
+        {
+            CaptureOverviewSnapshot();
+        }
+
+        selectedPartIndex = index;
         selectedLabel.text = parts[index].Label;
         selectedLabel.gameObject.SetActive(true);
         if (descriptionText != null)
         {
-            descriptionText.text = partDescriptions[index];
+            descriptionText.text = FormatDescription(partDescriptions[index]);
             descriptionText.gameObject.SetActive(true);
         }
-        selectedLabelRect.anchoredPosition = SelectedLabelPosition;
         selectedLabelRect.localScale = Vector3.one;
         if (descriptionRect != null)
         {
-            descriptionRect.anchoredPosition = DescriptionPosition;
             descriptionRect.localScale = Vector3.one;
         }
 
         SetDetailMode(true);
-        Bounds targetBounds = CalculateBounds(targets);
-        if (index != 5)
+        UpdateModalNavigation(index);
+        UpdatePartButtonSelection(index);
+        Bounds targetBounds = hasTarget ? CalculateBounds(targets) : fullModelBounds;
+        if (hasTarget && index != 5)
         {
             ShowHighlight(targets, targetBounds);
         }
@@ -381,7 +453,7 @@ public class PageTwoPartsController : MonoBehaviour
         {
             StopCoroutine(transition);
         }
-        transition = StartCoroutine(AnimateSelection(SelectedLabelPosition));
+        transition = StartCoroutine(AnimateCameraOnly());
     }
 
     private IEnumerator AnimateSelection(Vector2 labelTarget)
@@ -421,7 +493,10 @@ public class PageTwoPartsController : MonoBehaviour
         {
             descriptionText.gameObject.SetActive(false);
         }
+        selectedPartIndex = -1;
+        UpdatePartButtonSelection(-1);
         SetDetailMode(false);
+        ReleaseOverviewSnapshot();
         ClearHighlight();
         SetCameraTarget(fullModelBounds, 1.18f);
         transition = StartCoroutine(AnimateCameraOnly());
@@ -441,26 +516,165 @@ public class PageTwoPartsController : MonoBehaviour
     private void SetDetailMode(bool showDetails)
     {
         isShowingDetails = showDetails;
-        buttonList?.gameObject.SetActive(!showDetails);
-        listButton?.gameObject.SetActive(false);
-        pageHeader?.SetActive(!showDetails);
-        pageTitle?.SetActive(!showDetails);
-        pageTitleIcon?.SetActive(!showDetails);
-        detailIcon?.SetActive(showDetails);
-        detailDivider?.SetActive(showDetails);
+        buttonList?.gameObject.SetActive(true);
+        pageHeader?.SetActive(true);
+        pageTitle?.SetActive(true);
+        pageTitleIcon?.SetActive(true);
+        overviewFrame?.SetActive(true);
+        overviewBadge?.SetActive(true);
+        detailIcon?.SetActive(false);
+        detailDivider?.SetActive(false);
+        ConfigureModelViewport(false);
+        detailOverlayRoot?.SetActive(showDetails);
 
-        if (previewCamera != null)
+        if (backgroundCanvasGroup != null)
         {
-            previewCamera.rect = showDetails
-                ? new Rect(0.603f, 0.05f, 0.374f, 0.89f)
-                : new Rect(0.463f, 0.153f, 0.378f, 0.668f);
+            backgroundCanvasGroup.interactable = !showDetails;
+            backgroundCanvasGroup.blocksRaycasts = !showDetails;
+        }
+    }
+
+    private void SelectAdjacentPart(int direction)
+    {
+        if (!isShowingDetails || selectedPartIndex < 0)
+        {
+            return;
         }
 
-        if (sceneCamera != null)
+        int nextIndex = selectedPartIndex + direction;
+        if (nextIndex < 0 || nextIndex >= parts.Length)
         {
-            sceneCamera.clearFlags = CameraClearFlags.SolidColor;
-            sceneCamera.backgroundColor = showDetails ? Color.white : new Color32(247, 247, 247, 255);
+            return;
         }
+
+        SelectPart(nextIndex, null);
+    }
+
+    private void UpdateModalNavigation(int index)
+    {
+        for (int i = 0; i < modalPartIcons.Length; i++)
+        {
+            modalPartIcons[i]?.SetActive(i == index);
+        }
+
+        const float activeWidth = 28f;
+        const float inactiveWidth = 8f;
+        const float dotGap = 7f;
+        float totalWidth = activeWidth + (modalDots.Length - 1) * inactiveWidth +
+                           (modalDots.Length - 1) * dotGap;
+        float cursor = -totalWidth * 0.5f;
+        for (int i = 0; i < modalDots.Length; i++)
+        {
+            Image dot = modalDots[i];
+            if (dot == null)
+            {
+                continue;
+            }
+
+            bool selected = i == index;
+            float width = selected ? activeWidth : inactiveWidth;
+            dot.color = selected
+                ? new Color32(30, 75, 185, 255)
+                : new Color32(190, 192, 195, 255);
+            dot.rectTransform.anchoredPosition = new Vector2(cursor + width * 0.5f, 0f);
+            dot.rectTransform.sizeDelta = new Vector2(width, 8f);
+            dot.rectTransform.localScale = Vector3.one;
+            dot.raycastTarget = false;
+            cursor += width + dotGap;
+        }
+
+        bool hasPrevious = index > 0;
+        bool hasNext = index < parts.Length - 1;
+        if (previousPartButton != null)
+        {
+            previousPartButton.interactable = hasPrevious;
+        }
+        if (nextPartButton != null)
+        {
+            nextPartButton.interactable = hasNext;
+        }
+        previousPartButton?.gameObject.SetActive(hasPrevious);
+        nextPartButton?.gameObject.SetActive(hasNext);
+        if (previousPartLabel != null && hasPrevious)
+        {
+            previousPartLabel.text = "\u2190  " + parts[index - 1].Label;
+        }
+        if (nextPartLabel != null && hasNext)
+        {
+            nextPartLabel.text = parts[index + 1].Label + "  \u2192";
+        }
+    }
+
+    private void UpdatePartButtonSelection(int selectedIndex)
+    {
+        Color32 normalText = new Color32(0, 0, 0, 255);
+        Color32 normalBorder = new Color32(218, 221, 224, 255);
+        for (int i = 0; i < partButtons.Length; i++)
+        {
+            Button button = partButtons[i];
+            if (button == null)
+            {
+                continue;
+            }
+
+            bool selected = i == selectedIndex;
+            Outline border = button.GetComponent<Outline>();
+            if (border != null)
+            {
+                border.effectColor = selected ? accentColor : normalBorder;
+            }
+
+            TextMeshProUGUI label = button.transform.Find("Label")?.GetComponent<TextMeshProUGUI>();
+            if (label == null)
+            {
+                continue;
+            }
+
+            label.color = selected ? accentColor : normalText;
+            Outline labelWeight = label.GetComponent<Outline>();
+            if (labelWeight != null)
+            {
+                labelWeight.effectColor = selected ? accentColor : normalText;
+            }
+        }
+    }
+
+    private static void EnsureFullRectRaycast(Button button)
+    {
+        if (button == null)
+            return;
+
+        Image image = button.GetComponent<Image>();
+        if (image != null)
+        {
+            image.sprite = null;
+            image.type = Image.Type.Simple;
+            image.color = new Color(1f, 1f, 1f, 0.001f);
+            image.raycastTarget = true;
+        }
+    }
+
+    private static string FormatDescription(string value)
+    {
+        string[] lines = value.Replace("\r", string.Empty).Split('\n');
+        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].Trim();
+            if (line.StartsWith("\u2022"))
+            {
+                line = line.Substring(1).TrimStart();
+            }
+
+            if (i > 0)
+            {
+                builder.Append('\n');
+            }
+            builder.Append("<color=#D31C1F>\u2022</color>  <color=#000000>");
+            builder.Append(line);
+            builder.Append("</color>");
+        }
+        return builder.ToString();
     }
 
     private IEnumerator AnimateCameraOnly()
@@ -503,9 +717,9 @@ public class PageTwoPartsController : MonoBehaviour
         previewCamera.nearClipPlane = 0.01f;
         previewCamera.farClipPlane = 5000f;
         previewCamera.transform.rotation = previewRotation;
-        previewCamera.rect = new Rect(0.463f, 0.153f, 0.378f, 0.668f);
-        Camera mainCamera = Camera.main;
-        previewCamera.depth = mainCamera != null ? mainCamera.depth + 1f : 1f;
+        previewCamera.rect = new Rect(0f, 0f, 1f, 1f);
+        previewCamera.depth = -10f;
+        ResizePreviewTexture();
 
         GameObject lightObject = new GameObject("PageTwoPreviewLight", typeof(Light));
         lightObject.transform.SetParent(cameraObject.transform, false);
@@ -515,6 +729,122 @@ public class PageTwoPartsController : MonoBehaviour
         previewLight.color = new Color(1f, 0.96f, 0.9f, 1f);
         previewLight.intensity = 0.62f;
         previewLight.shadows = LightShadows.None;
+    }
+
+    private void ConfigureModelViewport(bool showDetails)
+    {
+        if (modelViewport == null)
+        {
+            Debug.LogError("[PageTwoPartsController] Thiếu ModelViewport để hiển thị mô hình 3D.");
+            return;
+        }
+
+        modelViewport.anchorMin = new Vector2(0f, 1f);
+        modelViewport.anchorMax = new Vector2(0f, 1f);
+        modelViewport.pivot = new Vector2(0f, 1f);
+        modelViewport.anchoredPosition = showDetails
+            ? new Vector2(1158f, -65f)
+            : new Vector2(865f, -198f);
+        modelViewport.sizeDelta = showDetails
+            ? new Vector2(718f, 961f)
+            : new Vector2(866f, 700f);
+
+        ResizePreviewTexture();
+    }
+
+    private void ResizePreviewTexture()
+    {
+        if (previewCamera == null || previewImage == null || modelViewport == null)
+        {
+            return;
+        }
+
+        int width = Mathf.Clamp(Mathf.RoundToInt(modelViewport.rect.width), 256, 2048);
+        int height = Mathf.Clamp(Mathf.RoundToInt(modelViewport.rect.height), 256, 2048);
+        if (previewTexture != null && previewTexture.width == width && previewTexture.height == height)
+        {
+            previewImage.texture = isShowingDetails && overviewSnapshotTexture != null
+                ? overviewSnapshotTexture
+                : previewTexture;
+            if (modalPreviewImage != null)
+            {
+                modalPreviewImage.texture = previewTexture;
+            }
+            return;
+        }
+
+        previewCamera.targetTexture = null;
+        ReleaseOverviewSnapshot();
+        ReleasePreviewTexture();
+        previewTexture = new RenderTexture(width, height, 24, RenderTextureFormat.Default)
+        {
+            name = "PageTwoModelPreview",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
+        };
+        previewTexture.Create();
+        previewCamera.targetTexture = previewTexture;
+        previewImage.texture = previewTexture;
+        if (modalPreviewImage != null)
+        {
+            modalPreviewImage.texture = previewTexture;
+        }
+    }
+
+    private void CaptureOverviewSnapshot()
+    {
+        if (previewTexture == null || previewImage == null)
+        {
+            return;
+        }
+
+        ReleaseOverviewSnapshot();
+        overviewSnapshotTexture = new RenderTexture(previewTexture.width, previewTexture.height, 0,
+            RenderTextureFormat.Default)
+        {
+            name = "PageTwoOverviewSnapshot",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp
+        };
+        overviewSnapshotTexture.Create();
+        Graphics.Blit(previewTexture, overviewSnapshotTexture);
+        previewImage.texture = overviewSnapshotTexture;
+    }
+
+    private void ReleaseOverviewSnapshot()
+    {
+        if (overviewSnapshotTexture == null)
+        {
+            return;
+        }
+
+        if (previewImage != null && previewImage.texture == overviewSnapshotTexture)
+        {
+            previewImage.texture = previewTexture;
+        }
+        overviewSnapshotTexture.Release();
+        Destroy(overviewSnapshotTexture);
+        overviewSnapshotTexture = null;
+    }
+
+    private void ReleasePreviewTexture()
+    {
+        if (previewTexture == null)
+        {
+            return;
+        }
+
+        if (previewImage != null && previewImage.texture == previewTexture)
+        {
+            previewImage.texture = null;
+        }
+        if (modalPreviewImage != null && modalPreviewImage.texture == previewTexture)
+        {
+            modalPreviewImage.texture = null;
+        }
+        previewTexture.Release();
+        Destroy(previewTexture);
+        previewTexture = null;
     }
 
     private void FocusImmediate(Bounds bounds, float padding)
@@ -550,7 +880,9 @@ public class PageTwoPartsController : MonoBehaviour
 
     private float CalculateCameraDistance(Bounds bounds, float padding)
     {
-        float viewportAspect = Mathf.Max(0.5f, (Screen.width * previewCamera.rect.width) / Mathf.Max(1f, Screen.height * previewCamera.rect.height));
+        float viewportAspect = previewTexture != null
+            ? (float)previewTexture.width / Mathf.Max(1f, previewTexture.height)
+            : Mathf.Max(0.5f, modelViewport != null ? modelViewport.rect.width / Mathf.Max(1f, modelViewport.rect.height) : 1f);
         float framedHalfSize = Mathf.Max(bounds.extents.y, bounds.extents.x / viewportAspect);
         float distance = framedHalfSize / Mathf.Tan(previewCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
         distance = distance * padding + bounds.extents.z;
@@ -566,7 +898,7 @@ public class PageTwoPartsController : MonoBehaviour
         lastScreenWidth = Screen.width;
         lastScreenHeight = Screen.height;
         orbitCenter = activeViewBounds.center;
-        orbitDistance = CalculateCameraDistance(activeViewBounds, selectedLabel != null && selectedLabel.gameObject.activeSelf ? 1.45f : 1.18f);
+        orbitDistance = CalculateCameraDistance(activeViewBounds, isShowingDetails ? 1.45f : 1.18f);
         UpdateOrbitCamera();
         UpdateClipPlanes(activeViewBounds, previewCamera.transform.position);
     }
@@ -585,8 +917,15 @@ public class PageTwoPartsController : MonoBehaviour
             return;
         }
 
-        Rect pixelRect = previewCamera.pixelRect;
-        bool pointerInside = pixelRect.Contains(Input.mousePosition);
+        RectTransform interactionRect = isShowingDetails && modalPreviewImage != null
+            ? modalPreviewImage.rectTransform
+            : modelViewport;
+        Canvas canvas = interactionRect != null ? interactionRect.GetComponentInParent<Canvas>() : null;
+        Camera eventCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? canvas.worldCamera
+            : null;
+        bool pointerInside = interactionRect != null &&
+                             RectTransformUtility.RectangleContainsScreenPoint(interactionRect, Input.mousePosition, eventCamera);
         if (Input.GetMouseButtonDown(0) && pointerInside)
         {
             isOrbiting = true;

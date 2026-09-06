@@ -19,6 +19,8 @@ public class SocketPoint : MonoBehaviour
     private GameObject guideFocusRing;
     private Vector3 originalLocalScale;
     private bool hasOriginalState;
+    private bool guideFocused;
+    private bool clickSelected;
 
     public bool AllowsMultipleConnections =>
         string.Equals(socketID, "5VDC", StringComparison.OrdinalIgnoreCase) ||
@@ -44,10 +46,37 @@ public class SocketPoint : MonoBehaviour
     public void SetGuideFocus(bool on)
     {
         CaptureOriginalState();
-        transform.localScale = on ? originalLocalScale * GuideFocusScale : originalLocalScale;
+        guideFocused = on;
+        RefreshFocusVisual();
+    }
+
+    public void SetClickSelection(bool on)
+    {
+        CaptureOriginalState();
+        clickSelected = on;
+        RefreshFocusVisual();
+    }
+
+    private void RefreshFocusVisual()
+    {
+        bool showRing = guideFocused || clickSelected;
+        transform.localScale = clickSelected
+            ? originalLocalScale * 1.38f
+            : guideFocused
+                ? originalLocalScale * GuideFocusScale
+                : originalLocalScale;
 
         EnsureGuideFocusRing();
-        guideFocusRing.SetActive(on);
+        guideFocusRing.SetActive(showRing);
+        LineRenderer ring = guideFocusRing.GetComponent<LineRenderer>();
+        if (ring != null)
+        {
+            Color ringColor = clickSelected
+                ? new Color(0.12f, 0.36f, 0.78f, 1f)
+                : new Color(0.05f, 0.45f, 0.9f, 1f);
+            ring.startColor = ringColor;
+            ring.endColor = ringColor;
+        }
     }
 
     private void CaptureOriginalState()
@@ -85,7 +114,7 @@ public class SocketPoint : MonoBehaviour
         ring.alignment = LineAlignment.View;
         ring.sortingOrder = 4500;
         ring.material = GetGuideFocusRingMaterial();
-        Color ringColor = new Color(1f, 0.82f, 0f, 1f);
+        Color ringColor = new Color(0.05f, 0.45f, 0.9f, 1f);
         ring.startColor = ringColor;
         ring.endColor = ringColor;
 

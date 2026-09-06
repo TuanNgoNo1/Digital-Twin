@@ -11,10 +11,12 @@ public class PageFourWiringTutorialController : MonoBehaviour
     [Header("Scene references")]
     [SerializeField] private Transform modelRoot;
     [SerializeField] private GameObject modelPrefab;
+    [SerializeField] private RawImage previewImage;
     [SerializeField] private Button playButton;
     [SerializeField] private RectTransform cursorObject;
     [SerializeField] private RawImage cursorImage;
     [SerializeField] private Texture handIconsTexture;
+    [SerializeField] private GameObject connectedWirePrefab;
     [SerializeField] private GameObject jack35Prefab;
     [SerializeField] private Material wireMaterial;
     [SerializeField] private Material jackBodyMaterial;
@@ -25,11 +27,14 @@ public class PageFourWiringTutorialController : MonoBehaviour
     [SerializeField] private float cursorTransferDuration = 0.8f;
     [SerializeField] private float cursorReleaseDuration = 1f;
     [SerializeField] private float resetDelay = 1f;
-    [SerializeField] private Vector2 socketANormalized = new Vector2(0.332f, 0.295f);
-    [SerializeField] private Vector2 socketBNormalized = new Vector2(0.716f, 0.322f);
+    [Tooltip("Vi tri Y0 trong he toa do local cua model bang.")]
+    [SerializeField] private Vector3 socketALocal = new Vector3(-0.102497f, -0.025666f, 0.24773f);
+    [Tooltip("Vi tri Pin11 trong he toa do local cua model bang.")]
+    [SerializeField] private Vector3 socketBLocal = new Vector3(-0.03568f, 0.116647f, 0.24773f);
 
     private Camera previewCamera;
     private Camera wireOverlayCamera;
+    private RenderTexture previewTexture;
     private LineRenderer wireLine;
     private Transform plugA;
     private Transform plugB;
@@ -46,6 +51,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
     private Quaternion socketARotation = Quaternion.identity;
     private Quaternion socketBRotation = Quaternion.identity;
     private GameObject visualRoot;
+    private GameObject connectedWireInstance;
     private Bounds boardBounds;
     private int lastScreenWidth;
     private int lastScreenHeight;
@@ -55,9 +61,9 @@ public class PageFourWiringTutorialController : MonoBehaviour
         yield return null;
         ResolveReferences();
         CreateFallbackSceneObjects();
-        if (modelRoot == null || jack35Prefab == null)
+        if (modelRoot == null || connectedWirePrefab == null)
         {
-            Debug.LogError("[PageFourWiringTutorial] Thiếu model hoặc Jack 3.5mm.");
+            Debug.LogError("[PageFourWiringTutorial] Thiếu model bảng hoặc model dây hướng dẫn.");
             yield break;
         }
 
@@ -67,10 +73,11 @@ public class PageFourWiringTutorialController : MonoBehaviour
         boardBounds = board != null ? CalculateBounds(board) : CalculateBounds(modelRoot);
         CreatePreviewCamera(boardBounds);
         ResolveSocketTargets(boardBounds);
-        CreateDemoWire(boardBounds);
+        CreateConnectedWirePreview();
         CreateWireOverlayCamera();
         playButton?.onClick.AddListener(PlayTutorial);
         ResetTutorial();
+        SetTutorialWireVisible(false);
         previewCamera.enabled = gameObject.activeInHierarchy;
         visualRoot.SetActive(gameObject.activeInHierarchy);
         lastScreenWidth = Screen.width;
@@ -130,12 +137,24 @@ public class PageFourWiringTutorialController : MonoBehaviour
         {
             Destroy(visualRoot);
         }
+        if (previewImage != null && previewImage.texture == previewTexture)
+        {
+            previewImage.texture = null;
+        }
+        if (previewTexture != null)
+        {
+            previewTexture.Release();
+            Destroy(previewTexture);
+        }
     }
 
     private void ResolveReferences()
     {
         modelRoot ??= transform.Find("PageFourModel");
         Transform content = transform.Find("PageFourContent");
+        previewImage ??= content != null
+            ? content.Find("PageFourPreviewCard/PreviewImage")?.GetComponent<RawImage>()
+            : null;
         playButton ??= content != null ? content.Find("PlayButton")?.GetComponent<Button>() : null;
         cursorObject ??= content != null ? content.Find("CursorObject") as RectTransform : null;
         if (cursorObject != null)
@@ -252,6 +271,10 @@ public class PageFourWiringTutorialController : MonoBehaviour
     {
         if (!isPlaying)
         {
+            if (cursorObject != null)
+            {
+                cursorObject.gameObject.SetActive(true);
+            }
             StartCoroutine(PlaySequence());
         }
     }
@@ -264,28 +287,33 @@ public class PageFourWiringTutorialController : MonoBehaviour
             playButton.interactable = false;
         }
 
+        SetTutorialWireVisible(false);
         cursorTarget = null;
-        yield return MoveCursorBetween(cursorIdlePosition, plugA.position, cursorApproachDuration);
-        cursorTarget = plugA;
-        SetCursorHolding(true);
-        yield return MovePlugWithCursor(plugA, plugA.position, socketA, plugA.rotation, socketARotation);
-        SetCursorHolding(false);
-        yield return new WaitForSeconds(0.2f);
-        yield return MoveCursorBetween(plugA.position, plugB.position, cursorTransferDuration);
-        cursorTarget = plugB;
-        SetCursorHolding(true);
-        yield return MovePlugWithCursor(plugB, plugB.position, socketB, plugB.rotation, socketBRotation);
-        SetCursorHolding(false);
-        cursorTarget = null;
-        yield return MoveCursorBetween(plugB.position, cursorIdlePosition, cursorReleaseDuration);
+        yield return MoveCursorBetween(cursorIdlePosition, socketA, cursorApproachDuration);
+        yield return AnimateClick();
+        yield return MoveCursorBetween(socketA, socketB, cursorTransferDuration);
+        yield return AnimateClick();
+
+        SetTutorialWireVisible(true);
+        yield return new WaitForSeconds(cursorReleaseDuration);
+        yield return MoveCursorBetween(socketB, cursorIdlePosition, cursorTransferDuration);
         yield return new WaitForSeconds(resetDelay);
 
         ResetTutorial();
+        SetTutorialWireVisible(false);
         isPlaying = false;
         if (playButton != null)
         {
             playButton.interactable = true;
         }
+    }
+
+    private IEnumerator AnimateClick()
+    {
+        SetCursorHolding(true);
+        yield return new WaitForSeconds(0.22f);
+        SetCursorHolding(false);
+        yield return new WaitForSeconds(0.18f);
     }
 
     private IEnumerator MovePlugWithCursor(Transform plug, Vector3 from, Vector3 to, Quaternion fromRotation, Quaternion toRotation)
@@ -331,8 +359,8 @@ public class PageFourWiringTutorialController : MonoBehaviour
         SetCursorHolding(false);
         if (cursorObject != null)
         {
-            cursorObject.gameObject.SetActive(true);
             SetCursorFromWorld(cursorIdlePosition);
+            cursorObject.gameObject.SetActive(false);
         }
     }
 
@@ -343,7 +371,25 @@ public class PageFourWiringTutorialController : MonoBehaviour
         previewCamera.clearFlags = CameraClearFlags.SolidColor;
         previewCamera.backgroundColor = Color.white;
         previewCamera.fieldOfView = 36f;
-        previewCamera.rect = new Rect(0.18f, 0.123f, 0.64f, 0.72f);
+        if (previewImage != null)
+        {
+            int textureWidth = Mathf.Max(16, Mathf.RoundToInt(previewImage.rectTransform.rect.width));
+            int textureHeight = Mathf.Max(16, Mathf.RoundToInt(previewImage.rectTransform.rect.height));
+            previewTexture = new RenderTexture(textureWidth, textureHeight, 24, RenderTextureFormat.ARGB32)
+            {
+                name = "PageFourPreviewTexture",
+                antiAliasing = 4,
+                filterMode = FilterMode.Bilinear
+            };
+            previewTexture.Create();
+            previewCamera.targetTexture = previewTexture;
+            previewCamera.rect = new Rect(0f, 0f, 1f, 1f);
+            previewImage.texture = previewTexture;
+        }
+        else
+        {
+            previewCamera.rect = new Rect(0.196f, 0.235f, 0.61f, 0.583f);
+        }
         previewCamera.depth = Camera.main != null ? Camera.main.depth + 1f : 1f;
 
         FramePreviewCamera(bounds);
@@ -360,7 +406,13 @@ public class PageFourWiringTutorialController : MonoBehaviour
     private void FramePreviewCamera(Bounds bounds)
     {
         Quaternion rotation = Quaternion.identity;
-        float aspect = Mathf.Max(0.6f, (Screen.width * previewCamera.rect.width) / Mathf.Max(1f, Screen.height * previewCamera.rect.height));
+        float previewWidth = previewTexture != null
+            ? previewTexture.width
+            : previewImage != null ? previewImage.rectTransform.rect.width : Screen.width * previewCamera.rect.width;
+        float previewHeight = previewTexture != null
+            ? previewTexture.height
+            : previewImage != null ? previewImage.rectTransform.rect.height : Screen.height * previewCamera.rect.height;
+        float aspect = Mathf.Max(0.6f, previewWidth / Mathf.Max(1f, previewHeight));
         // Chừa khoảng ngang bên phải cho dây nhưng vẫn giữ tâm camera tại tâm Board.
         float halfSize = Mathf.Max(bounds.extents.y * 0.92f, bounds.size.x * 0.98f / aspect);
         float distance = halfSize / Mathf.Tan(previewCamera.fieldOfView * 0.5f * Mathf.Deg2Rad) * 1.02f + bounds.extents.z;
@@ -371,6 +423,44 @@ public class PageFourWiringTutorialController : MonoBehaviour
         previewCamera.farClipPlane = distance + bounds.extents.magnitude * 2.5f;
     }
 
+    private static Bounds CalculatePreviewBounds(Transform model)
+    {
+        string[] focusNames =
+        {
+            "PC3", "Encoder_Stand", "Rotor_Alt", "Rotor_Encoder", "Rotor_Main", "Rotor_Stand"
+        };
+        bool initialized = false;
+        Bounds focusBounds = default;
+        foreach (string focusName in focusNames)
+        {
+            Transform focus = FindDescendant(model, focusName);
+            if (focus == null)
+            {
+                continue;
+            }
+            foreach (Renderer renderer in focus.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!initialized)
+                {
+                    focusBounds = renderer.bounds;
+                    initialized = true;
+                }
+                else
+                {
+                    focusBounds.Encapsulate(renderer.bounds);
+                }
+            }
+        }
+
+        if (initialized)
+        {
+            return focusBounds;
+        }
+
+        Transform board = FindDescendant(model, "Board");
+        return board != null ? CalculateBounds(board) : CalculateBounds(model);
+    }
+
     private void ResolveSocketTargets(Bounds bounds)
     {
         cursorIdlePosition = new Vector3(
@@ -378,31 +468,37 @@ public class PageFourWiringTutorialController : MonoBehaviour
             Mathf.Lerp(bounds.min.y, bounds.max.y, 0.82f),
             bounds.min.z - Mathf.Max(0.002f, bounds.size.z * 0.01f));
 
-        Transform socket1 = FindDescendant(modelRoot, "Socket1");
-        Transform socket2 = FindDescendant(modelRoot, "Socket2");
-        socket1 ??= FindDescendant(transform, "Socket1");
-        socket2 ??= FindDescendant(transform, "Socket2");
-        if (socket1 != null && socket2 != null)
+        if (modelRoot != null)
         {
-            socketA = socket1.position;
-            socketB = socket2.position;
-            socketARotation = socket1.rotation;
-            socketBRotation = socket2.rotation;
+            socketA = modelRoot.TransformPoint(socketALocal);
+            socketB = modelRoot.TransformPoint(socketBLocal);
+            socketARotation = modelRoot.rotation;
+            socketBRotation = modelRoot.rotation;
             return;
         }
 
-        Debug.LogWarning("[PageFourWiringTutorial] Không tìm thấy Socket1/Socket2, dùng tọa độ dự phòng.");
-        float z = bounds.min.z - Mathf.Max(0.002f, bounds.size.z * 0.01f);
-        socketA = new Vector3(
-            Mathf.Lerp(bounds.min.x, bounds.max.x, socketANormalized.x),
-            Mathf.Lerp(bounds.min.y, bounds.max.y, socketANormalized.y),
-            z);
-        socketB = new Vector3(
-            Mathf.Lerp(bounds.min.x, bounds.max.x, socketBNormalized.x),
-            Mathf.Lerp(bounds.min.y, bounds.max.y, socketBNormalized.y),
-            z);
+        Debug.LogWarning("[PageFourWiringTutorial] Khong tim thay model bang de doi toa do o cam.");
+        socketA = bounds.center;
+        socketB = bounds.center;
         socketARotation = Quaternion.identity;
         socketBRotation = Quaternion.identity;
+    }
+
+    private void CreateConnectedWirePreview()
+    {
+        connectedWireInstance = Instantiate(connectedWirePrefab, modelRoot, false);
+        connectedWireInstance.name = "TutorialConnectedWire";
+        connectedWireInstance.transform.localPosition = Vector3.zero;
+        connectedWireInstance.transform.localRotation = Quaternion.identity;
+        connectedWireInstance.transform.localScale = Vector3.one;
+        SetLayerRecursively(connectedWireInstance, WireOverlayLayer);
+
+        foreach (Collider collider in connectedWireInstance.GetComponentsInChildren<Collider>(true))
+            collider.enabled = false;
+        foreach (Renderer renderer in connectedWireInstance.GetComponentsInChildren<Renderer>(true))
+            renderer.sortingOrder = 5000;
+
+        connectedWireInstance.SetActive(false);
     }
 
     private void CreateDemoWire(Bounds bounds)
@@ -436,6 +532,28 @@ public class PageFourWiringTutorialController : MonoBehaviour
         plugBStartRotation = plugB.rotation;
     }
 
+    private void SetTutorialWireVisible(bool visible)
+    {
+        if (connectedWireInstance != null)
+        {
+            connectedWireInstance.SetActive(visible);
+            return;
+        }
+
+        if (wireLine != null)
+        {
+            wireLine.gameObject.SetActive(visible);
+        }
+        if (plugA != null)
+        {
+            plugA.gameObject.SetActive(visible);
+        }
+        if (plugB != null)
+        {
+            plugB.gameObject.SetActive(visible);
+        }
+    }
+
     private void CreateWireOverlayCamera()
     {
         int wireMask = 1 << WireOverlayLayer;
@@ -450,6 +568,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
         cameraObject.transform.SetParent(previewCamera.transform, false);
         wireOverlayCamera = cameraObject.GetComponent<Camera>();
         wireOverlayCamera.CopyFrom(previewCamera);
+        wireOverlayCamera.targetTexture = null;
         wireOverlayCamera.cullingMask = wireMask;
 
         UniversalAdditionalCameraData previewCameraData = previewCamera.GetUniversalAdditionalCameraData();
@@ -509,7 +628,7 @@ public class PageFourWiringTutorialController : MonoBehaviour
         }
         Vector3 a = plugA.position;
         Vector3 b = plugB.position;
-        float sag = Vector3.Distance(a, b) * 0.08f;
+        float sag = 0f;
         for (int i = 0; i < wireLine.positionCount; i++)
         {
             float t = i / (wireLine.positionCount - 1f);
@@ -534,6 +653,18 @@ public class PageFourWiringTutorialController : MonoBehaviour
             return;
         }
         Vector3 screen = previewCamera.WorldToScreenPoint(worldPosition);
+        if (previewImage != null && previewTexture != null)
+        {
+            Vector3 viewport = previewCamera.WorldToViewportPoint(worldPosition);
+            Rect imageBounds = previewImage.rectTransform.rect;
+            Vector3 imageLocal = new Vector3(
+                Mathf.Lerp(imageBounds.xMin, imageBounds.xMax, viewport.x),
+                Mathf.Lerp(imageBounds.yMin, imageBounds.yMax, viewport.y),
+                0f);
+            Vector3 imageWorld = previewImage.rectTransform.TransformPoint(imageLocal);
+            cursorObject.position = new Vector3(imageWorld.x, imageWorld.y, cursorObject.position.z);
+            return;
+        }
         RectTransform pageRect = transform as RectTransform;
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(pageRect, screen, null, out Vector2 local))
         {
