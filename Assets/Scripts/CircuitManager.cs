@@ -16,6 +16,8 @@ public class CircuitManager : MonoBehaviour
     private const string StartSceneName = "StartScene";
     private const string CompletionCheatCode = "6394";
     private const string NewBoardTextureResource = "NewServoWiringBoard";
+    private const string NewWiringResourceRoot = "NewWiring/JackConnector_";
+    private const float NewSocketDiameterPixels = 20f;
     private static readonly string[] PracticalNavigationLabels =
     {
         "1. \u0110\u1EA5u n\u1ED1i m\u1EA1ch \u0111i\u1EC1u khi\u1EC3n \u0111\u1ED9ng c\u01A1",
@@ -141,6 +143,10 @@ public class CircuitManager : MonoBehaviour
     private static int savedCompletedWires;
     private static bool savedSystemUnlocked;
     private Material newBoardMaterial;
+    private GameObject newBoardSurface;
+    private GameObject newSocketVisualRoot;
+    private readonly List<SavedRendererVisibility> legacyRendererStates = new List<SavedRendererVisibility>();
+    private readonly List<SavedSocketPose> savedSocketPoses = new List<SavedSocketPose>();
     private static readonly List<SavedWireConnection> savedWireConnections = new List<SavedWireConnection>();
 
     private sealed class StepNavigationItem
@@ -160,6 +166,21 @@ public class CircuitManager : MonoBehaviour
         public string WireName;
         public string SocketA;
         public string SocketB;
+    }
+
+    private sealed class SavedRendererVisibility
+    {
+        public Renderer Renderer;
+        public bool WasEnabled;
+    }
+
+    private sealed class SavedSocketPose
+    {
+        public SocketPoint Socket;
+        public Vector3 OriginalPosition;
+        public Quaternion OriginalRotation;
+        public Vector3 WiringPosition;
+        public Quaternion WiringRotation;
     }
 
     public bool IsPopupVisible => popupVisible || Time.frameCount == popupClosedFrame;
@@ -408,6 +429,7 @@ public class CircuitManager : MonoBehaviour
         // the uploaded board stays upright and parallel to the camera plane.
         surface.transform.rotation = mainCamera.transform.rotation;
         surface.transform.localScale = new Vector3(width, height, 1f);
+        newBoardSurface = surface;
 
         Shader shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Texture");
         if (shader == null)
@@ -478,6 +500,7 @@ public class CircuitManager : MonoBehaviour
             if (socket == null || !socketPixels.TryGetValue(socket.socketID, out Vector2 pixel))
                 continue;
 
+            SavedSocketPose socketPose = GetOrCreateSocketPose(socket);
             float horizontal = pixel.x / boardTexture.width - 0.5f;
             float vertical = 0.5f - pixel.y / boardTexture.height;
             socket.transform.position = layoutCenter +
@@ -485,9 +508,138 @@ public class CircuitManager : MonoBehaviour
                 up * (vertical * height) +
                 surfaceNormal * 0.01f;
             socket.transform.rotation = surface.transform.rotation;
+            socketPose.WiringPosition = socket.transform.position;
+            socketPose.WiringRotation = socket.transform.rotation;
         }
 
+        CreateNewSocketVisuals(mainCamera);
         Debug.Log($"[Circuit] Da thay bang moi va can lai {socketPixels.Count} vi tri socket.");
+    }
+
+    private void CreateNewSocketVisuals(Camera mainCamera)
+    {
+        if (mainCamera == null)
+            return;
+
+        if (newSocketVisualRoot != null)
+            Destroy(newSocketVisualRoot);
+
+        newSocketVisualRoot = new GameObject("NewWiringSocketVisuals");
+        int createdCount = 0;
+        HashSet<string> missingResources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (SocketPoint socket in FindObjectsByType<SocketPoint>(
+                     FindObjectsInactive.Include,
+                     FindObjectsSortMode.None))
+        {
+            if (socket == null || string.IsNullOrWhiteSpace(socket.socketID))
+                continue;
+
+            string colorName = GetJackColorName(socket);
+            string resourcePath = NewWiringResourceRoot + colorName;
+            GameObject jackPrefab = Resources.Load<GameObject>(resourcePath);
+            if (jackPrefab == null)
+            {
+                missingResources.Add(resourcePath);
+                continue;
+            }
+
+            GameObject visual = Instantiate(jackPrefab, newSocketVisualRoot.transform, false);
+            visual.name = $"Jack_{socket.socketID}_{colorName}";
+            visual.transform.position = socket.transform.position;
+            // The supplied jack faces local +Z. The board Quad faces the camera
+            // on local -Z, so turn the jack around and point its opening forward.
+            visual.transform.rotation = mainCamera.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+            visual.transform.localScale = Vector3.one;
+
+            if (TryGetRendererBounds(visual, out Bounds bounds))
+            {
+                float currentDiameter = Mathf.Max(
+                    ProjectedBoundsSize(bounds, mainCamera.transform.right),
+                    ProjectedBoundsSize(bounds, mainCamera.transform.up));
+                float targetDiameter = ScreenPixelsToWorldSize(
+                    mainCamera,
+                    socket.transform.position,
+                    NewSocketDiameterPixels);
+                if (currentDiameter > 0.000001f && targetDiameter > 0f)
+                    visual.transform.localScale *= targetDiameter / currentDiameter;
+            }
+
+            foreach (Renderer renderer in visual.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.enabled = true;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+
+            createdCount++;
+        }
+
+        foreach (string missingResource in missingResources)
+            Debug.LogWarning($"[Circuit] Khong tim thay model giac moi Resources/{missingResource}.");
+
+        Debug.Log($"[Circuit] Da nhan ban {createdCount} giac moi cho bang noi day.");
+    }
+
+    private static string GetJackColorName(SocketPoint socket)
+    {
+        switch (socket.acceptColor)
+        {
+            case WireColor.Red: return "Red";
+            case WireColor.Black: return "Black";
+            case WireColor.Yellow: return "Yellow";
+            case WireColor.Green: return "Green";
+            case WireColor.Blue: return "Blue";
+        }
+
+        string id = socket.socketID ?? string.Empty;
+        if (id.IndexOf("GND", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            string.Equals(id, "Pin10", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "Pin12", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "Pin14", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "oA", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "Motor_A", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Black";
+        }
+
+        if (string.Equals(id, "24VDC", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "5VDC", StringComparison.OrdinalIgnoreCase) ||
+            id.StartsWith("+V", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "oB", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, "Motor_B", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Red";
+        }
+
+        return "Yellow";
+    }
+
+    private static float ScreenPixelsToWorldSize(Camera camera, Vector3 worldPosition, float pixels)
+    {
+        Vector3 screen = camera.WorldToScreenPoint(worldPosition);
+        if (screen.z <= camera.nearClipPlane)
+            return 0f;
+
+        Vector3 center = camera.ScreenToWorldPoint(screen);
+        Vector3 edge = camera.ScreenToWorldPoint(
+            new Vector3(screen.x + pixels, screen.y, screen.z));
+        return Vector3.Distance(center, edge);
+    }
+
+    private static bool TryGetRendererBounds(GameObject root, out Bounds bounds)
+    {
+        Renderer[] renderers = root.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0)
+        {
+            bounds = default;
+            return false;
+        }
+
+        bounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++)
+            bounds.Encapsulate(renderers[i].bounds);
+        return true;
     }
 
     private bool TryFitBoardInsideModelPanel(
@@ -545,7 +697,7 @@ public class CircuitManager : MonoBehaviour
         return true;
     }
 
-    private static void HideLegacyBoardModels(
+    private void HideLegacyBoardModels(
         Transform modelRoot,
         Renderer surfaceRenderer)
     {
@@ -554,6 +706,7 @@ public class CircuitManager : MonoBehaviour
             if (renderer == null || renderer == surfaceRenderer)
                 continue;
 
+            RememberLegacyRenderer(renderer);
             // The new board texture already contains the PLC, HMI, driver,
             // motor and encoder.  Disable every old model renderer so none of
             // those meshes can cover or z-fight with the replacement surface.
@@ -561,7 +714,7 @@ public class CircuitManager : MonoBehaviour
         }
     }
 
-    private static void HideLegacyBoardOverlays()
+    private void HideLegacyBoardOverlays()
     {
         string[] legacyRootNames =
         {
@@ -579,10 +732,76 @@ public class CircuitManager : MonoBehaviour
                 continue;
 
             foreach (Renderer renderer in candidate.GetComponentsInChildren<Renderer>(true))
+            {
+                RememberLegacyRenderer(renderer);
                 renderer.enabled = false;
+            }
 
             if (candidate.name == "HMI_Runtime_Canvas")
                 candidate.gameObject.SetActive(false);
+        }
+    }
+
+    private void RememberLegacyRenderer(Renderer renderer)
+    {
+        if (renderer == null || legacyRendererStates.Any(state => state.Renderer == renderer))
+            return;
+
+        legacyRendererStates.Add(new SavedRendererVisibility
+        {
+            Renderer = renderer,
+            WasEnabled = renderer.enabled
+        });
+    }
+
+    private SavedSocketPose GetOrCreateSocketPose(SocketPoint socket)
+    {
+        SavedSocketPose existing = savedSocketPoses.FirstOrDefault(state => state.Socket == socket);
+        if (existing != null)
+            return existing;
+
+        SavedSocketPose created = new SavedSocketPose
+        {
+            Socket = socket,
+            OriginalPosition = socket.transform.position,
+            OriginalRotation = socket.transform.rotation,
+            WiringPosition = socket.transform.position,
+            WiringRotation = socket.transform.rotation
+        };
+        savedSocketPoses.Add(created);
+        return created;
+    }
+
+    private void SetOriginalOperationScreenVisible(bool visible)
+    {
+        if (newBoardSurface != null)
+            newBoardSurface.SetActive(!visible);
+        if (newSocketVisualRoot != null)
+            newSocketVisualRoot.SetActive(!visible);
+
+        foreach (SavedRendererVisibility state in legacyRendererStates)
+        {
+            if (state.Renderer != null)
+                state.Renderer.enabled = visible ? state.WasEnabled : false;
+        }
+
+        foreach (SavedSocketPose state in savedSocketPoses)
+        {
+            if (state.Socket == null)
+                continue;
+
+            state.Socket.transform.SetPositionAndRotation(
+                visible ? state.OriginalPosition : state.WiringPosition,
+                visible ? state.OriginalRotation : state.WiringRotation);
+        }
+
+        if (visible)
+        {
+            foreach (GameObject replacementWire in replacementWireInstances.Values)
+            {
+                if (replacementWire != null)
+                    replacementWire.SetActive(false);
+            }
         }
     }
 
@@ -596,6 +815,10 @@ public class CircuitManager : MonoBehaviour
     {
         if (newBoardMaterial != null)
             Destroy(newBoardMaterial);
+        if (newBoardSurface != null)
+            Destroy(newBoardSurface);
+        if (newSocketVisualRoot != null)
+            Destroy(newSocketVisualRoot);
     }
 
     private void EnsureResponsiveCameraFraming()
@@ -779,6 +1002,7 @@ public class CircuitManager : MonoBehaviour
 
     private void ShowOnlyStep(int visibleStepIndex)
     {
+        SetOriginalOperationScreenVisible(false);
         ClearSelectedSocket();
         for (int i = 0; i < stepRoots.Count; i++)
         {
@@ -1053,7 +1277,7 @@ public class CircuitManager : MonoBehaviour
         {
             case WireColor.Red: return new Color(0.82f, 0.025f, 0.035f, 1f);
             case WireColor.Black: return new Color(0.035f, 0.04f, 0.05f, 1f);
-            case WireColor.Yellow: return new Color(0.38f, 0.145f, 0f, 1f);
+            case WireColor.Yellow: return new Color(1f, 0.72f, 0.02f, 1f);
             case WireColor.Green: return new Color(0.02f, 0.55f, 0.14f, 1f);
             case WireColor.Blue: return new Color(0.05f, 0.25f, 0.85f, 1f);
             default: return Color.white;
@@ -1192,6 +1416,8 @@ public class CircuitManager : MonoBehaviour
 
     private void OpenHmiScene()
     {
+        SetOriginalOperationScreenVisible(true);
+
         if (plcControllerV2 == null)
         {
             plcControllerV2 = PLCController_v2.Instance != null
@@ -1236,6 +1462,8 @@ public class CircuitManager : MonoBehaviour
     {
         if (plcControllerV2 != null)
             plcControllerV2.SetRuntimeHmiVisible(false);
+
+        SetOriginalOperationScreenVisible(false);
 
         Scene hmiScene = SceneManager.GetSceneByName(hmiSceneName);
         if (hmiScene.isLoaded)

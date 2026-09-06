@@ -3,14 +3,23 @@ using UnityEngine.Rendering;
 
 public sealed class ProceduralConnectedWire : MonoBehaviour
 {
-    private const int PathSegments = 24;
-    private const int RadialSegments = 10;
+    private const int PathSegments = 32;
+    private const int RadialSegments = 12;
 
     private WireBody sourceWire;
     private Color wireColor;
     private float radius;
     private Mesh wireMesh;
     private Material wireMaterial;
+    private Material metalMaterial;
+    private GameObject plugASleeve;
+    private GameObject plugAElbow;
+    private GameObject plugAStrainRelief;
+    private GameObject plugAMetalCollar;
+    private GameObject plugBSleeve;
+    private GameObject plugBElbow;
+    private GameObject plugBStrainRelief;
+    private GameObject plugBMetalCollar;
 
     public void Configure(WireBody wire, Color color)
     {
@@ -27,18 +36,18 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
 
         EnsureRenderer();
 
-        Vector3 start = sourceWire.plugA.transform.position;
-        Vector3 end = sourceWire.plugB.transform.position;
-        if ((end - start).sqrMagnitude < 0.000001f)
+        Vector3 socketStart = sourceWire.plugA.transform.position;
+        Vector3 socketEnd = sourceWire.plugB.transform.position;
+        if ((socketEnd - socketStart).sqrMagnitude < 0.000001f)
             return false;
 
         Camera camera = Camera.main;
         Vector3 surfaceNormal = camera != null
             ? -camera.transform.forward.normalized
             : -Vector3.forward;
-        float surfaceOffset = Mathf.Clamp(radius * 0.8f, 0.0015f, 0.0045f);
-        start += surfaceNormal * surfaceOffset;
-        end += surfaceNormal * surfaceOffset;
+        float plugRise = Mathf.Clamp(radius * 4.2f, 0.004f, 0.012f);
+        Vector3 start = socketStart + surfaceNormal * plugRise;
+        Vector3 end = socketEnd + surfaceNormal * plugRise;
 
         Vector3 routeRight = camera != null ? camera.transform.right.normalized : Vector3.right;
         Vector3 routeUp = camera != null ? camera.transform.up.normalized : Vector3.up;
@@ -142,6 +151,15 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
         wireMesh.uv = uvs;
         wireMesh.triangles = triangles;
         wireMesh.RecalculateBounds();
+        UpdatePlugVisuals(
+            socketStart,
+            socketEnd,
+            start,
+            end,
+            centers[1] - centers[0],
+            centers[ringCount - 2] - centers[ringCount - 1],
+            surfaceNormal,
+            plugRise);
         return true;
     }
 
@@ -187,6 +205,163 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
         meshRenderer.receiveShadows = false;
     }
 
+    private void UpdatePlugVisuals(
+        Vector3 socketStart,
+        Vector3 socketEnd,
+        Vector3 routeStart,
+        Vector3 routeEnd,
+        Vector3 startTangent,
+        Vector3 endTangent,
+        Vector3 surfaceNormal,
+        float plugRise)
+    {
+        EnsureMetalMaterial();
+        UpdatePlugVisual(
+            ref plugASleeve,
+            ref plugAElbow,
+            ref plugAStrainRelief,
+            ref plugAMetalCollar,
+            "A",
+            socketStart,
+            routeStart,
+            startTangent.normalized,
+            surfaceNormal,
+            plugRise);
+        UpdatePlugVisual(
+            ref plugBSleeve,
+            ref plugBElbow,
+            ref plugBStrainRelief,
+            ref plugBMetalCollar,
+            "B",
+            socketEnd,
+            routeEnd,
+            endTangent.normalized,
+            surfaceNormal,
+            plugRise);
+    }
+
+    private void UpdatePlugVisual(
+        ref GameObject sleeve,
+        ref GameObject elbow,
+        ref GameObject strainRelief,
+        ref GameObject metalCollar,
+        string suffix,
+        Vector3 socketPosition,
+        Vector3 routePosition,
+        Vector3 routeDirection,
+        Vector3 surfaceNormal,
+        float plugRise)
+    {
+        if (routeDirection.sqrMagnitude < 0.001f)
+            routeDirection = Vector3.right;
+
+        sleeve = EnsurePrimitive(sleeve, PrimitiveType.Cylinder, "CablePlug_" + suffix + "_Sleeve", wireMaterial);
+        elbow = EnsurePrimitive(elbow, PrimitiveType.Sphere, "CablePlug_" + suffix + "_Elbow", wireMaterial);
+        strainRelief = EnsurePrimitive(
+            strainRelief,
+            PrimitiveType.Cylinder,
+            "CablePlug_" + suffix + "_StrainRelief",
+            wireMaterial);
+        metalCollar = EnsurePrimitive(
+            metalCollar,
+            PrimitiveType.Cylinder,
+            "CablePlug_" + suffix + "_MetalCollar",
+            metalMaterial);
+
+        float sleeveRadius = radius * 2.25f;
+        SetCylinder(
+            sleeve.transform,
+            Vector3.Lerp(socketPosition, routePosition, 0.53f),
+            surfaceNormal,
+            sleeveRadius,
+            plugRise * 0.92f);
+
+        elbow.transform.position = routePosition;
+        elbow.transform.rotation = Quaternion.identity;
+        elbow.transform.localScale = Vector3.one * (sleeveRadius * 2f);
+
+        float reliefLength = radius * 5.2f;
+        SetCylinder(
+            strainRelief.transform,
+            routePosition + routeDirection * (reliefLength * 0.5f),
+            routeDirection,
+            radius * 1.55f,
+            reliefLength);
+
+        SetCylinder(
+            metalCollar.transform,
+            socketPosition + surfaceNormal * (radius * 0.35f),
+            surfaceNormal,
+            radius * 2.55f,
+            radius * 0.7f);
+    }
+
+    private GameObject EnsurePrimitive(
+        GameObject value,
+        PrimitiveType primitiveType,
+        string objectName,
+        Material material)
+    {
+        if (value == null)
+        {
+            value = GameObject.CreatePrimitive(primitiveType);
+            value.name = objectName;
+            value.transform.SetParent(transform, true);
+            Collider collider = value.GetComponent<Collider>();
+            if (collider != null)
+            {
+                collider.enabled = false;
+                DestroyOwnedObject(collider);
+            }
+        }
+
+        MeshRenderer renderer = value.GetComponent<MeshRenderer>();
+        if (renderer != null)
+        {
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+        return value;
+    }
+
+    private static void SetCylinder(
+        Transform cylinder,
+        Vector3 position,
+        Vector3 axis,
+        float cylinderRadius,
+        float length)
+    {
+        Vector3 direction = axis.sqrMagnitude > 0.001f ? axis.normalized : Vector3.up;
+        cylinder.position = position;
+        cylinder.rotation = Quaternion.FromToRotation(Vector3.up, direction);
+        // Unity's primitive cylinder is two units tall with a radius of 0.5.
+        cylinder.localScale = new Vector3(cylinderRadius * 2f, length * 0.5f, cylinderRadius * 2f);
+    }
+
+    private void EnsureMetalMaterial()
+    {
+        if (metalMaterial != null)
+            return;
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+        if (shader == null)
+            shader = Shader.Find("Standard");
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        metalMaterial = new Material(shader) { name = name + "_PlugMetal" };
+        Color metalColor = new Color(0.68f, 0.72f, 0.76f, 1f);
+        if (metalMaterial.HasProperty("_BaseColor"))
+            metalMaterial.SetColor("_BaseColor", metalColor);
+        if (metalMaterial.HasProperty("_Color"))
+            metalMaterial.SetColor("_Color", metalColor);
+        if (metalMaterial.HasProperty("_Smoothness"))
+            metalMaterial.SetFloat("_Smoothness", 0.82f);
+        if (metalMaterial.HasProperty("_Metallic"))
+            metalMaterial.SetFloat("_Metallic", 0.78f);
+    }
+
     private float GetRingRadius(int pathIndex, int ringCount)
     {
         bool terminalCollar = pathIndex <= 2 || pathIndex >= ringCount - 3;
@@ -227,8 +402,21 @@ public sealed class ProceduralConnectedWire : MonoBehaviour
     private void OnDestroy()
     {
         if (wireMesh != null)
-            Destroy(wireMesh);
+            DestroyOwnedObject(wireMesh);
         if (wireMaterial != null)
-            Destroy(wireMaterial);
+            DestroyOwnedObject(wireMaterial);
+        if (metalMaterial != null)
+            DestroyOwnedObject(metalMaterial);
+    }
+
+    private static void DestroyOwnedObject(Object value)
+    {
+        if (value == null)
+            return;
+
+        if (Application.isPlaying)
+            Destroy(value);
+        else
+            DestroyImmediate(value);
     }
 }
