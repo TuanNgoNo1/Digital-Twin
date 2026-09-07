@@ -21,7 +21,10 @@ public class ResponsiveCameraFraming : MonoBehaviour
 
     private void Update()
     {
-        if (lastScreenWidth != Screen.width || lastScreenHeight != Screen.height)
+        int currentWidth = targetCamera != null && targetCamera.pixelWidth > 0 ? targetCamera.pixelWidth : Screen.width;
+        int currentHeight = targetCamera != null && targetCamera.pixelHeight > 0 ? targetCamera.pixelHeight : Screen.height;
+
+        if (lastScreenWidth != currentWidth || lastScreenHeight != currentHeight)
             ApplyFraming();
     }
 
@@ -30,13 +33,19 @@ public class ResponsiveCameraFraming : MonoBehaviour
         if (targetCamera == null)
             targetCamera = GetComponent<Camera>();
 
-        if (targetCamera == null || targetCamera.orthographic || Screen.height <= 0)
+        if (targetCamera == null)
             return;
 
-        lastScreenWidth = Screen.width;
-        lastScreenHeight = Screen.height;
+        int currentWidth = targetCamera.pixelWidth > 0 ? targetCamera.pixelWidth : Screen.width;
+        int currentHeight = targetCamera.pixelHeight > 0 ? targetCamera.pixelHeight : Screen.height;
 
-        float currentAspect = (float)Screen.width / Screen.height;
+        if (targetCamera.orthographic || currentHeight <= 0)
+            return;
+
+        lastScreenWidth = currentWidth;
+        lastScreenHeight = currentHeight;
+
+        float currentAspect = (float)currentWidth / currentHeight;
         float referenceAspect = Mathf.Max(0.01f, designAspect);
         float referenceFov = Mathf.Clamp(designVerticalFov, 1f, 179f);
 

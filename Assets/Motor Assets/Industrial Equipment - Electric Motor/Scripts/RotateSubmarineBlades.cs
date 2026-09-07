@@ -13,8 +13,13 @@ public class RotateSubmarineBlades : MonoBehaviour
     // Object Rotation Speed (Sẽ được cập nhật từ PLCController)
     public float rotationSpeed = 100;
 
-    // Rotation direction: 1 for Thuan (clockwise), -1 for Nguoc (counter-clockwise)
-    public float rotationDirection = 1f;
+    // Local axis used to rotate target objects.
+    // Default is Vector3.forward to preserve existing scene behavior.
+    public Vector3 rotationAxis = Vector3.forward;
+
+    // Rotation direction corrected to match the real motor:
+    // Thuan/forward = -1, Nguoc/reverse = 1 for the current Rotor_Main model orientation.
+    public float rotationDirection = -1f;
 
     // Number of rotations to perform
     public float soVongCanQuay = 1000f;
@@ -51,7 +56,8 @@ public class RotateSubmarineBlades : MonoBehaviour
             {
                 // Chú ý: rotationSpeed ở đây được PLCController cập nhật liên tục qua Coroutine
                 // Sử dụng FixedUpdate kết hợp Time.fixedDeltaTime để quay đồng bộ vật lý
-                rotatableObject.transform.Rotate(Vector3.forward * rotationSpeed * rotationDirection * Time.fixedDeltaTime);
+                Vector3 axis = rotationAxis.sqrMagnitude > 0.0001f ? rotationAxis.normalized : Vector3.forward;
+                rotatableObject.transform.Rotate(axis * rotationSpeed * rotationDirection * Time.fixedDeltaTime, Space.Self);
             }
         }
 
@@ -79,10 +85,11 @@ public class RotateSubmarineBlades : MonoBehaviour
         }
     }
 
-    // Set rotation direction dựa trên trạng thái bit từ PLC
+    // Set rotation direction dựa trên trạng thái bit từ PLC.
+    // Đảo dấu ở đây để chiều quay motor ảo khớp với motor thật.
     public void SetRotationDirection(bool isThuan)
     {
-        rotationDirection = isThuan ? 1f : -1f;
+        rotationDirection = isThuan ? -1f : 1f;
     }
 
     // Thiết lập số vòng cần quay từ thanh ghi PLC

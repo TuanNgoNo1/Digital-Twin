@@ -12,7 +12,6 @@ using UnityEditor;
 public class PLCController_v2 : MonoBehaviour
 {
     public const string DefaultPiBaseUrl = "http://103.238.69.131:8080/plc";
-    public const string DefaultTelemetryBaseUrl = "http://103.238.69.131:8080/rs485";
     public const string DefaultControlUrl = DefaultPiBaseUrl + "/control";
 
     public static PLCController_v2 Instance { get; private set; }
@@ -59,7 +58,6 @@ public class PLCController_v2 : MonoBehaviour
 
     [Header("Pi Gateway")]
     public string piBaseUrl = DefaultPiBaseUrl;
-    public string telemetryBaseUrl = DefaultTelemetryBaseUrl;
     public string controlEndpoint = "/control";
     public string telemetryEndpoint = "/telemetry";
     public float pollInterval = 0.5f;
@@ -95,6 +93,10 @@ public class PLCController_v2 : MonoBehaviour
     public GameObject hmiScreenObject;
     [Tooltip("Ty le thu nho bang HMI de khong che vung noi day.")]
     public float canvasHmiScale = 0.5f;
+
+    [Header("HMI Branding")]
+    public Sprite institutionLogo;
+    public string institutionName = "Học viện Công nghệ Bưu chính Viễn thông";
 
     [Header("Control Step Camera Layout")]
     public bool enableControlCameraLayout = true;
@@ -149,13 +151,14 @@ public class PLCController_v2 : MonoBehaviour
     private TextMeshProUGUI hmiSpeedText;
     private TextMeshProUGUI hmiSpeedSetText;
     private TextMeshProUGUI hmiStatusText;
+    private TextMeshProUGUI hmiStatusValueText;
     private TMP_InputField hmiRotInput;
     private TMP_InputField hmiAngleInput;
     private TMP_InputField hmiSpeedInput;
     private Button hmiForwardButton;
     private Button hmiReverseButton;
-    private readonly Color hmiDirectionNormalColor = new Color(0.09f, 0.55f, 0.95f, 1f);
-    private readonly Color hmiDirectionSelectedColor = new Color(0.06f, 0.72f, 0.36f, 1f);
+    private readonly Color hmiDirectionNormalColor = Color.white;
+    private readonly Color hmiDirectionSelectedColor = new Color(0.90f, 0.94f, 1f, 1f);
     private float hmiTargetSpeed = 0f;
     private float hmiTargetRotations;
     private float hmiTargetAngle;
@@ -168,11 +171,15 @@ public class PLCController_v2 : MonoBehaviour
     private Camera controlMainCamera;
     private Camera motorPipCamera;
     private Camera wiringPipCamera;
+    private Camera controlBackgroundBlurCamera;
     private GameObject controlCameraOverlayRoot;
+    private GameObject controlBackgroundBlurRoot;
     private RawImage motorPipImage;
     private RawImage wiringPipImage;
+    private RawImage controlBackgroundBlurImage;
     private RenderTexture motorPipTexture;
     private RenderTexture wiringPipTexture;
+    private RenderTexture controlBackgroundBlurTexture;
     private bool controlCameraLayoutActive;
     private bool mainCameraStateSaved;
     private Vector3 savedMainCameraPosition;
@@ -182,6 +189,7 @@ public class PLCController_v2 : MonoBehaviour
     private bool savedMainCameraOrthographic;
     private float savedMainCameraOrthographicSize;
     private Rect savedMainCameraRect;
+    private RenderTexture savedMainCameraTargetTexture;
     private float nextPipCameraRefreshTime;
     private readonly List<BehaviourEnabledState> disabledMainCameraBehaviours = new List<BehaviourEnabledState>();
     private readonly List<LayerState> hmiLayerStates = new List<LayerState>();
@@ -207,6 +215,7 @@ public class PLCController_v2 : MonoBehaviour
     private void OnDestroy()
     {
         ReleaseControlCameraTextures();
+        ReleaseControlBackgroundTexture();
     }
 
     private void InitializeController()
@@ -278,7 +287,9 @@ public class PLCController_v2 : MonoBehaviour
         if (virtualMotorOwnsRotor || bladesOwnRotor)
             return;
 
-        float direction = visualDirectionForward ? 1f : -1f;
+        // Rotor_Main model faces opposite the real motor convention, so invert
+        // visual forward/reverse direction in the fallback rotation path too.
+        float direction = visualDirectionForward ? -1f : 1f;
         visualMotorRotor.Rotate(Vector3.forward, visualDegreesPerSecond * direction * Time.deltaTime, Space.Self);
     }
 
@@ -408,11 +419,16 @@ public class PLCController_v2 : MonoBehaviour
 
     private void ShowHmiStatusMessage(string message, Color color)
     {
-        if (hmiStatusText == null)
+        TextMeshProUGUI target = hmiStatusValueText != null
+            ? hmiStatusValueText
+            : hmiStatusText;
+        if (target == null)
             return;
 
-        hmiStatusText.text = $"Trang thai: {message}";
-        hmiStatusText.color = color;
+        target.text = hmiStatusValueText != null
+            ? message
+            : $"Trang thai: {message}";
+        target.color = color;
     }
 
     private void RefreshHmiInputCacheBeforeStart()
@@ -494,6 +510,30 @@ public class PLCController_v2 : MonoBehaviour
     {
         ResetHmiInputFields();
         SendControl("ERR_RESET", speed: 0f, rotations: 0f, angle: 0f, mode: "");
+    }
+
+    private void ResetHmiData()
+    {
+        ResetHmiInputFields();
+        LatestTelemetry.running = false;
+        LatestTelemetry.speedRpm = 0f;
+        LatestTelemetry.setSpeedRpm = 0f;
+        LatestTelemetry.pulseFrequency = 0f;
+        LatestTelemetry.count = 0;
+        LatestTelemetry.rotations = 0f;
+        LatestTelemetry.angle = 0f;
+        LatestTelemetry.encoderCount = 0;
+        LatestTelemetry.rotationsExact = 0f;
+        LatestTelemetry.pulsesPerSample = 0f;
+        LatestTelemetry.speedRawD164 = 0f;
+        UpdateCanvasHmi();
+        SendControl(
+            "RESET_COUNTER",
+            speed: 0f,
+            rotations: 0f,
+            angle: 0f,
+            direction: LatestTelemetry.direction,
+            mode: "");
     }
 
     private void UpdateDirectionButtons()
@@ -676,7 +716,7 @@ public class PLCController_v2 : MonoBehaviour
     {
         while (true)
         {
-            using (UnityWebRequest request = UnityWebRequest.Get(BuildUrl(telemetryBaseUrl, telemetryEndpoint)))
+            using (UnityWebRequest request = UnityWebRequest.Get(BuildUrl(telemetryEndpoint)))
             {
                 request.timeout = timeoutSeconds;
                 request.SetRequestHeader("ngrok-skip-browser-warning", "true");
@@ -880,11 +920,24 @@ public class PLCController_v2 : MonoBehaviour
 
         Vector3 viewForward = savedMainCameraRotation * Vector3.forward;
         Transform hmiTarget = hmiScreenObject != null ? hmiScreenObject.transform : (canvasHmiRoot != null ? canvasHmiRoot.transform : null);
+        bool hmiUsesScreenSpace = IsCanvasHmiScreenSpace();
         mainCamera.rect = new Rect(0f, 0f, 1f, 1f);
         mainCamera.orthographic = false;
 
-        if (hmiTarget != null)
+        if (hmiUsesScreenSpace)
+        {
+            if (TryCalculateWiringOverviewBounds(out Bounds overviewBounds))
+                FrameCameraAtBoundsTight(mainCamera, overviewBounds, viewForward, wiringPipCameraFov, 0.9f, 0.16f);
+            else if (TryCalculateWiringPipBounds(out Bounds wiringBounds))
+                FrameCameraAtBoundsTight(mainCamera, wiringBounds, viewForward, wiringPipCameraFov, 0.85f, 0.16f);
+        }
+        else if (hmiTarget != null)
+        {
             FrameCameraAtTarget(mainCamera, hmiTarget, viewForward, controlHmiCameraFov, controlHmiDistanceScale, controlHmiMinDistance);
+        }
+
+        if (hmiUsesScreenSpace)
+            ActivateControlBackgroundBlur(mainCamera);
 
         EnsureControlCameraOverlay();
         MoveHmiToUiLayerForPip();
@@ -897,8 +950,19 @@ public class PLCController_v2 : MonoBehaviour
         nextPipCameraRefreshTime = 0f;
     }
 
+    private bool IsCanvasHmiScreenSpace()
+    {
+        if (canvasHmiRoot == null)
+            return false;
+
+        Canvas canvas = canvasHmiRoot.GetComponent<Canvas>();
+        return canvas != null && canvas.renderMode != RenderMode.WorldSpace;
+    }
+
     private void DeactivateControlCameraLayout()
     {
+        DeactivateControlBackgroundBlur();
+
         if (motorPipCamera != null)
             motorPipCamera.gameObject.SetActive(false);
         if (wiringPipCamera != null)
@@ -916,6 +980,7 @@ public class PLCController_v2 : MonoBehaviour
             controlMainCamera.orthographic = savedMainCameraOrthographic;
             controlMainCamera.orthographicSize = savedMainCameraOrthographicSize;
             controlMainCamera.rect = savedMainCameraRect;
+            controlMainCamera.targetTexture = savedMainCameraTargetTexture;
         }
 
         RestoreMainCameraFramingBehaviours();
@@ -936,6 +1001,7 @@ public class PLCController_v2 : MonoBehaviour
         savedMainCameraOrthographic = mainCamera.orthographic;
         savedMainCameraOrthographicSize = mainCamera.orthographicSize;
         savedMainCameraRect = mainCamera.rect;
+        savedMainCameraTargetTexture = mainCamera.targetTexture;
         mainCameraStateSaved = true;
     }
 
@@ -987,6 +1053,126 @@ public class PLCController_v2 : MonoBehaviour
         }
     }
 
+    private void ActivateControlBackgroundBlur(Camera sourceCamera)
+    {
+        if (sourceCamera == null)
+            return;
+
+        EnsureControlBackgroundBlurRoot();
+
+        int width = Mathf.Max(256, Screen.width / 6);
+        int height = Mathf.Max(144, Screen.height / 6);
+        if (controlBackgroundBlurTexture == null ||
+            controlBackgroundBlurTexture.width != width ||
+            controlBackgroundBlurTexture.height != height)
+        {
+            ReleaseControlBackgroundTexture();
+            controlBackgroundBlurTexture = new RenderTexture(
+                width, height, 24, RenderTextureFormat.ARGB32)
+            {
+                name = "ControlBackgroundBlurTexture",
+                filterMode = FilterMode.Bilinear,
+                antiAliasing = 1,
+                useMipMap = false
+            };
+            controlBackgroundBlurTexture.Create();
+        }
+
+        if (controlBackgroundBlurImage != null)
+            controlBackgroundBlurImage.texture = controlBackgroundBlurTexture;
+
+        Camera blurCamera = EnsurePipCamera(
+            ref controlBackgroundBlurCamera,
+            "Runtime_Control_Background_Blur_Camera");
+        CopyPipCameraSettings(sourceCamera, blurCamera);
+        blurCamera.transform.SetPositionAndRotation(
+            sourceCamera.transform.position,
+            sourceCamera.transform.rotation);
+        blurCamera.orthographic = sourceCamera.orthographic;
+        blurCamera.orthographicSize = sourceCamera.orthographicSize;
+        blurCamera.fieldOfView = sourceCamera.fieldOfView;
+        blurCamera.rect = new Rect(0f, 0f, 1f, 1f);
+        blurCamera.targetTexture = controlBackgroundBlurTexture;
+        blurCamera.enabled = true;
+        blurCamera.gameObject.SetActive(true);
+
+        sourceCamera.targetTexture = savedMainCameraTargetTexture;
+        if (controlBackgroundBlurRoot != null)
+            controlBackgroundBlurRoot.SetActive(true);
+    }
+
+    private void EnsureControlBackgroundBlurRoot()
+    {
+        if (controlBackgroundBlurRoot != null)
+            return;
+
+        controlBackgroundBlurRoot = new GameObject("Runtime_Control_Background_Blur");
+        Canvas canvas = controlBackgroundBlurRoot.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 900;
+
+        CanvasScaler scaler = controlBackgroundBlurRoot.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1280f, 720f);
+
+        GameObject background = new GameObject("BlurredCameraBackground");
+        background.transform.SetParent(controlBackgroundBlurRoot.transform, false);
+        RectTransform backgroundRect = background.AddComponent<RectTransform>();
+        backgroundRect.anchorMin = Vector2.zero;
+        backgroundRect.anchorMax = Vector2.one;
+        backgroundRect.offsetMin = Vector2.zero;
+        backgroundRect.offsetMax = Vector2.zero;
+        controlBackgroundBlurImage = background.AddComponent<RawImage>();
+        controlBackgroundBlurImage.raycastTarget = false;
+
+        GameObject veil = new GameObject("CoolLightVeil");
+        veil.transform.SetParent(controlBackgroundBlurRoot.transform, false);
+        RectTransform veilRect = veil.AddComponent<RectTransform>();
+        veilRect.anchorMin = Vector2.zero;
+        veilRect.anchorMax = Vector2.one;
+        veilRect.offsetMin = Vector2.zero;
+        veilRect.offsetMax = Vector2.zero;
+        Image veilImage = veil.AddComponent<Image>();
+        veilImage.color = new Color(0.86f, 0.92f, 0.98f, 0.30f);
+        veilImage.raycastTarget = false;
+
+        controlBackgroundBlurRoot.SetActive(false);
+    }
+
+    private void DeactivateControlBackgroundBlur()
+    {
+        if (controlMainCamera != null)
+            controlMainCamera.targetTexture = savedMainCameraTargetTexture;
+
+        if (controlBackgroundBlurCamera != null)
+        {
+            controlBackgroundBlurCamera.enabled = false;
+            controlBackgroundBlurCamera.gameObject.SetActive(false);
+        }
+
+        if (controlBackgroundBlurRoot != null)
+            controlBackgroundBlurRoot.SetActive(false);
+    }
+
+    private void ReleaseControlBackgroundTexture()
+    {
+        if (controlBackgroundBlurImage != null)
+            controlBackgroundBlurImage.texture = null;
+
+        if (controlBackgroundBlurCamera != null &&
+            controlBackgroundBlurCamera.targetTexture == controlBackgroundBlurTexture)
+        {
+            controlBackgroundBlurCamera.targetTexture = null;
+        }
+
+        if (controlBackgroundBlurTexture == null)
+            return;
+
+        controlBackgroundBlurTexture.Release();
+        Destroy(controlBackgroundBlurTexture);
+        controlBackgroundBlurTexture = null;
+    }
+
     private void EnsureControlCameraOverlay()
     {
         if (controlCameraOverlayRoot != null)
@@ -1006,22 +1192,25 @@ public class PLCController_v2 : MonoBehaviour
         motorPipImage = CreatePipPanel(
             controlCameraOverlayRoot.transform,
             "MotorPipPanel",
-            "MOTOR AO",
+            "MOTOR \u1EA2O",
             new Vector2(1f, 0f),
             new Vector2(1f, 0f),
             new Vector2(1f, 0f),
             motorPipOffset,
             motorPipSize);
 
-        wiringPipImage = CreatePipPanel(
-            controlCameraOverlayRoot.transform,
-            "WiringPipPanel",
-            "DAY NOI",
-            new Vector2(0f, 0f),
-            new Vector2(0f, 0f),
-            new Vector2(0f, 0f),
-            wiringPipOffset,
-            wiringPipSize);
+        if (!IsCanvasHmiScreenSpace())
+        {
+            wiringPipImage = CreatePipPanel(
+                controlCameraOverlayRoot.transform,
+                "WiringPipPanel",
+                "DAY NOI",
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                wiringPipOffset,
+                wiringPipSize);
+        }
 
         controlCameraOverlayRoot.SetActive(false);
     }
@@ -1039,13 +1228,13 @@ public class PLCController_v2 : MonoBehaviour
         panelRect.sizeDelta = size;
 
         Image background = panel.AddComponent<Image>();
-        background.color = new Color(0.01f, 0.04f, 0.05f, 0.78f);
+        background.color = new Color(1f, 1f, 1f, 0.92f);
         background.raycastTarget = false;
         AddShadow(panel, new Color(0f, 0f, 0f, 0.32f), new Vector2(0f, -5f));
 
         TextMeshProUGUI label = CreateText(panel.transform, "Label", title, new Vector2(8f, -4f), new Vector2(size.x - 16f, 22f), 13, true);
         label.alignment = TextAlignmentOptions.MidlineLeft;
-        label.color = Color.white;
+        label.color = new Color(0.08f, 0.1f, 0.12f, 1f);
 
         GameObject view = new GameObject("View");
         view.transform.SetParent(panel.transform, false);
@@ -1068,11 +1257,15 @@ public class PLCController_v2 : MonoBehaviour
             return;
 
         RenderTexture motorTexture = EnsureRenderTexture(ref motorPipTexture, motorPipSize, "MotorPipTexture");
-        RenderTexture wiringTexture = EnsureRenderTexture(ref wiringPipTexture, wiringPipSize, "WiringPipTexture");
         if (motorPipImage != null)
             motorPipImage.texture = motorTexture;
+
+        RenderTexture wiringTexture = null;
         if (wiringPipImage != null)
+        {
+            wiringTexture = EnsureRenderTexture(ref wiringPipTexture, wiringPipSize, "WiringPipTexture");
             wiringPipImage.texture = wiringTexture;
+        }
 
         Camera motorCamera = EnsurePipCamera(ref motorPipCamera, "Runtime_Motor_PIP_Camera");
         CopyPipCameraSettings(sourceCamera, motorCamera);
@@ -1086,21 +1279,29 @@ public class PLCController_v2 : MonoBehaviour
         else
             motorCamera.transform.SetPositionAndRotation(savedMainCameraPosition, savedMainCameraRotation);
 
-        Camera wiringCamera = EnsurePipCamera(ref wiringPipCamera, "Runtime_Wiring_PIP_Camera");
-        CopyPipCameraSettings(sourceCamera, wiringCamera);
-        wiringCamera.targetTexture = wiringTexture;
-        float effectiveWiringFov = Mathf.Clamp(wiringPipCameraFov, 28f, 38f);
-        if (TryCalculateWiringOverviewBounds(out Bounds overviewBounds))
-            FrameCameraAtBoundsTight(wiringCamera, overviewBounds, baseViewForward, effectiveWiringFov, 0.9f, 0.16f);
-        else if (TryCalculateWiringPipBounds(out Bounds wiringBounds))
-            FrameCameraAtBoundsTight(wiringCamera, wiringBounds, baseViewForward, effectiveWiringFov, 0.78f, 0.16f);
-        else
+        if (wiringPipImage != null)
         {
-            wiringCamera.fieldOfView = effectiveWiringFov;
-            wiringCamera.transform.SetPositionAndRotation(savedMainCameraPosition, savedMainCameraRotation);
+            Camera wiringCamera = EnsurePipCamera(ref wiringPipCamera, "Runtime_Wiring_PIP_Camera");
+            CopyPipCameraSettings(sourceCamera, wiringCamera);
+            wiringCamera.targetTexture = wiringTexture;
+            float effectiveWiringFov = Mathf.Clamp(wiringPipCameraFov, 28f, 38f);
+            if (TryCalculateWiringOverviewBounds(out Bounds overviewBounds))
+                FrameCameraAtBoundsTight(wiringCamera, overviewBounds, baseViewForward, effectiveWiringFov, 0.9f, 0.16f);
+            else if (TryCalculateWiringPipBounds(out Bounds wiringBounds))
+                FrameCameraAtBoundsTight(wiringCamera, wiringBounds, baseViewForward, effectiveWiringFov, 0.78f, 0.16f);
+            else
+            {
+                wiringCamera.fieldOfView = effectiveWiringFov;
+                wiringCamera.transform.SetPositionAndRotation(savedMainCameraPosition, savedMainCameraRotation);
+            }
+            wiringCamera.enabled = true;
+            wiringCamera.gameObject.SetActive(true);
         }
-        wiringCamera.enabled = true;
-        wiringCamera.gameObject.SetActive(true);
+        else if (wiringPipCamera != null)
+        {
+            wiringPipCamera.enabled = false;
+            wiringPipCamera.gameObject.SetActive(false);
+        }
     }
 
     private Camera EnsurePipCamera(ref Camera camera, string name)
@@ -1614,12 +1815,7 @@ public class PLCController_v2 : MonoBehaviour
 
     private string BuildUrl(string endpoint)
     {
-        return BuildUrl(piBaseUrl, endpoint);
-    }
-
-    private static string BuildUrl(string baseUrl, string endpoint)
-    {
-        baseUrl = (baseUrl ?? string.Empty).TrimEnd('/');
+        string baseUrl = piBaseUrl.TrimEnd('/');
         string suffix = endpoint.StartsWith("/") ? endpoint : "/" + endpoint;
         return baseUrl + suffix;
     }
@@ -1628,9 +1824,6 @@ public class PLCController_v2 : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(piBaseUrl) || IsLegacyGatewayUrl(piBaseUrl))
             piBaseUrl = DefaultPiBaseUrl;
-
-        if (string.IsNullOrWhiteSpace(telemetryBaseUrl) || IsLegacyGatewayUrl(telemetryBaseUrl))
-            telemetryBaseUrl = DefaultTelemetryBaseUrl;
 
         if (string.IsNullOrWhiteSpace(url) || IsLegacyGatewayUrl(url))
             url = DefaultControlUrl;
@@ -1659,6 +1852,273 @@ public class PLCController_v2 : MonoBehaviour
     }
 
     private void CreateCanvasHmi()
+    {
+        if (canvasHmiRoot != null)
+            return;
+
+        bool usesSceneHmi = hmiScreenObject != null;
+        canvasHmiRoot = usesSceneHmi
+            ? hmiScreenObject.transform.parent.gameObject
+            : new GameObject("Runtime_Pi_HMI_Canvas");
+
+        Canvas canvas = canvasHmiRoot.GetComponent<Canvas>();
+        if (canvas == null)
+            canvas = canvasHmiRoot.AddComponent<Canvas>();
+        if (!usesSceneHmi)
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 1000;
+
+        CanvasScaler scaler = canvasHmiRoot.GetComponent<CanvasScaler>();
+        if (scaler == null)
+            scaler = canvasHmiRoot.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1280f, 720f);
+
+        if (canvasHmiRoot.GetComponent<GraphicRaycaster>() == null)
+            canvasHmiRoot.AddComponent<GraphicRaycaster>();
+
+        GameObject panel = hmiScreenObject != null
+            ? hmiScreenObject
+            : new GameObject("HMI_Screen");
+        if (panel.transform.parent != canvasHmiRoot.transform)
+            panel.transform.SetParent(canvasHmiRoot.transform, false);
+
+        Vector2 panelSize = new Vector2(590f, 516f);
+        canvasHmiPanelRect = panel.GetComponent<RectTransform>();
+        if (canvasHmiPanelRect == null)
+            canvasHmiPanelRect = panel.AddComponent<RectTransform>();
+
+        RectTransform rootRect = canvasHmiRoot.GetComponent<RectTransform>();
+        bool screenSpaceHmi = canvas.renderMode != RenderMode.WorldSpace;
+        if (rootRect != null && screenSpaceHmi)
+        {
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.pivot = new Vector2(0.5f, 0.5f);
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+            canvasHmiRoot.transform.localScale = Vector3.one;
+        }
+        else if (rootRect != null)
+        {
+            rootRect.sizeDelta = panelSize;
+        }
+
+        if (screenSpaceHmi)
+        {
+            canvasHmiPanelRect.anchorMin = Vector2.one;
+            canvasHmiPanelRect.anchorMax = Vector2.one;
+            canvasHmiPanelRect.pivot = Vector2.one;
+            canvasHmiPanelRect.anchoredPosition = new Vector2(-30f, -82f);
+            panel.transform.localScale = Vector3.one * 0.85f;
+        }
+        else
+        {
+            canvasHmiPanelRect.anchorMin = new Vector2(0f, 1f);
+            canvasHmiPanelRect.anchorMax = new Vector2(0f, 1f);
+            canvasHmiPanelRect.pivot = new Vector2(0f, 1f);
+            canvasHmiPanelRect.anchoredPosition = usesSceneHmi
+                ? Vector2.zero
+                : canvasHmiAnchoredPosition;
+            panel.transform.localScale = usesSceneHmi
+                ? Vector3.one
+                : Vector3.one * canvasHmiScale;
+        }
+        canvasHmiPanelRect.sizeDelta = panelSize;
+
+        Color ink = new Color(0.07f, 0.075f, 0.085f, 1f);
+        Color brandRed = new Color(0.76f, 0.055f, 0.075f, 1f);
+        Color paleRed = new Color(1f, 0.945f, 0.95f, 1f);
+        Color borderRed = new Color(0.86f, 0.16f, 0.18f, 1f);
+        Color borderGold = new Color(0.72f, 0.56f, 0.02f, 1f);
+        Color greenButton = new Color(0.15f, 0.72f, 0.015f, 1f);
+        Color stopRed = new Color(0.75f, 0.055f, 0.075f, 1f);
+        Color goldButton = new Color(0.73f, 0.59f, 0.01f, 1f);
+
+        Image panelImage = panel.GetComponent<Image>();
+        if (panelImage == null)
+            panelImage = panel.AddComponent<Image>();
+        panelImage.color = new Color(1f, 1f, 1f, 0.98f);
+        ApplyRoundedImage(panelImage);
+        AddShadow(panel, new Color(0.04f, 0.09f, 0.16f, 0.22f), new Vector2(0f, -8f));
+
+        Transform iconBadge = MakeSubPanel(
+            panel.transform,
+            "ControllerIconBadge",
+            new Vector2(28f, -22f),
+            new Vector2(56f, 56f),
+            paleRed);
+        CreateControllerDocumentIcon(iconBadge, brandRed);
+
+        TextMeshProUGUI dashboardTitle = CreateText(
+            panel.transform,
+            "DashboardTitle",
+            "B\u1ED9 \u0111i\u1EC1u khi\u1EC3n",
+            new Vector2(96f, -24f),
+            new Vector2(440f, 52f),
+            30,
+            true);
+        dashboardTitle.color = ink;
+
+        CreateDecorativeImage(
+            panel.transform,
+            "HeaderDivider",
+            new Vector2(28f, -92f),
+            new Vector2(534f, 2f),
+            new Color(0.87f, 0.88f, 0.90f, 1f));
+
+        Transform setupCard = MakeOutlinedSubPanel(
+            panel.transform,
+            "SetupCard",
+            new Vector2(36f, -106f),
+            new Vector2(365f, 392f),
+            Color.white,
+            borderRed);
+        Transform controlCard = MakeOutlinedSubPanel(
+            panel.transform,
+            "ControlCard",
+            new Vector2(416f, -106f),
+            new Vector2(158f, 392f),
+            Color.white,
+            borderGold);
+
+        TextMeshProUGUI setupTitle = CreateText(
+            setupCard, "SetupTitle", "Thi\u1EBFt l\u1EADp",
+            new Vector2(24f, -18f), new Vector2(220f, 32f), 23, true);
+        setupTitle.color = ink;
+        TextMeshProUGUI controlTitle = CreateText(
+            controlCard, "ControlTitle", "\u0110i\u1EC1u khi\u1EC3n",
+            new Vector2(18f, -18f), new Vector2(128f, 32f), 21, true);
+        controlTitle.color = ink;
+
+        CreateText(
+            setupCard, "RotationLabel", "\u0110\u1EB7t v\u1ECB tr\u00ED (v\u00F2ng)",
+            new Vector2(24f, -64f), new Vector2(310f, 32f), 21, true);
+        hmiRotInput = CreateInputField(
+            setupCard, "RotInput", "0",
+            new Vector2(24f, -104f), new Vector2(230f, 50f), 22);
+        CreateButton(
+            setupCard, "SetRot", "SET",
+            new Vector2(264f, -104f), new Vector2(77f, 50f), brandRed)
+            .onClick.AddListener(() =>
+            { if (float.TryParse(hmiRotInput.text, out float value)) SetTargetRotations(value); });
+
+        CreateText(
+            setupCard, "AngleLabel", "\u0110\u1EB7t v\u1ECB tr\u00ED (\u0111\u1ED9)",
+            new Vector2(24f, -170f), new Vector2(310f, 32f), 21, true);
+        hmiAngleInput = CreateInputField(
+            setupCard, "AngleInput", "0",
+            new Vector2(24f, -210f), new Vector2(230f, 50f), 22);
+        CreateButton(
+            setupCard, "SetAngle", "SET",
+            new Vector2(264f, -210f), new Vector2(77f, 50f), brandRed)
+            .onClick.AddListener(() =>
+            { if (float.TryParse(hmiAngleInput.text, out float value)) SetTargetAngle(value); });
+
+        CreateText(
+            setupCard, "SpeedLabel", "\u0110\u1EB7t t\u1ED1c \u0111\u1ED9 (v\u00F2ng / ph\u00FAt)",
+            new Vector2(24f, -276f), new Vector2(320f, 34f), 21, true);
+        Button minusButton = CreateButton(
+            setupCard, "Minus", "\u2212",
+            new Vector2(24f, -320f), new Vector2(48f, 50f), Color.white);
+        minusButton.onClick.AddListener(() => SpeedDown(1));
+        SetButtonTextColor(minusButton, ink);
+        AddBorder(minusButton.gameObject, new Color(0.82f, 0.84f, 0.87f, 1f), 1f);
+
+        hmiSpeedInput = CreateInputField(
+            setupCard, "SpeedInput", "0",
+            new Vector2(80f, -320f), new Vector2(110f, 50f), 22);
+        Button plusButton = CreateButton(
+            setupCard, "Plus", "+",
+            new Vector2(198f, -320f), new Vector2(48f, 50f), Color.white);
+        plusButton.onClick.AddListener(() => SpeedUp(1));
+        SetButtonTextColor(plusButton, ink);
+        AddBorder(plusButton.gameObject, new Color(0.82f, 0.84f, 0.87f, 1f), 1f);
+        CreateButton(
+            setupCard, "SetSpeed", "SET",
+            new Vector2(264f, -320f), new Vector2(77f, 50f), brandRed)
+            .onClick.AddListener(() =>
+            { if (float.TryParse(hmiSpeedInput.text, out float value)) SetSpeed(value); });
+
+        hmiForwardButton = CreateButton(
+            controlCard, "Fwd", "Thu\u1EADn",
+            new Vector2(14f, -58f), new Vector2(130f, 44f), Color.white);
+        hmiForwardButton.onClick.AddListener(SetDirectionForward);
+        SetButtonTextColor(hmiForwardButton, ink);
+        AddBorder(hmiForwardButton.gameObject, new Color(0.84f, 0.85f, 0.87f, 1f), 1f);
+
+        hmiReverseButton = CreateButton(
+            controlCard, "Rev", "Ng\u01B0\u1EE3c",
+            new Vector2(14f, -108f), new Vector2(130f, 44f), Color.white);
+        hmiReverseButton.onClick.AddListener(SetDirectionReverse);
+        SetButtonTextColor(hmiReverseButton, ink);
+        AddBorder(hmiReverseButton.gameObject, new Color(0.84f, 0.85f, 0.87f, 1f), 1f);
+
+        CreateButton(
+            controlCard, "Start", "START",
+            new Vector2(14f, -158f), new Vector2(130f, 44f), greenButton)
+            .onClick.AddListener(TurnOn);
+        CreateButton(
+            controlCard, "Stop", "STOP",
+            new Vector2(14f, -208f), new Vector2(130f, 44f), stopRed)
+            .onClick.AddListener(TurnOff);
+        CreateButton(
+            controlCard, "RstRight", "RST",
+            new Vector2(14f, -258f), new Vector2(130f, 44f), goldButton)
+            .onClick.AddListener(ResetHmiInputsAndPlc);
+        Button resetDataButton = CreateButton(
+            controlCard, "ResetData", "RESET\nD\u1EEE LI\u1EC6U",
+            new Vector2(14f, -308f), new Vector2(130f, 60f), brandRed);
+        resetDataButton.onClick.AddListener(ResetHmiData);
+        TextMeshProUGUI resetDataLabel =
+            resetDataButton.GetComponentInChildren<TextMeshProUGUI>();
+        if (resetDataLabel != null)
+        {
+            resetDataLabel.fontSize = 17f;
+            resetDataLabel.fontWeight = FontWeight.Black;
+            resetDataLabel.fontStyle = FontStyles.Bold;
+            resetDataLabel.lineSpacing = -8f;
+        }
+
+        Transform statusCard = MakeSubPanel(
+            panel.transform,
+            "StatusCard",
+            new Vector2(218f, -530f),
+            new Vector2(372f, 214f),
+            Color.white);
+        Transform statusPill = MakeSubPanel(
+            statusCard,
+            "StatusPill",
+            new Vector2(22f, -20f),
+            new Vector2(328f, 48f),
+            paleRed);
+        hmiStatusText = CreateText(
+            statusPill, "RunStatusLabel", "Tr\u1EA1ng th\u00E1i:",
+            new Vector2(22f, 0f), new Vector2(150f, 48f), 20, true);
+        hmiStatusText.color = ink;
+        hmiStatusValueText = CreateText(
+            statusPill, "RunStatusValue", "M\u1EA5t k\u1EBFt n\u1ED1i",
+            new Vector2(166f, 0f), new Vector2(140f, 48f), 19, true);
+        hmiStatusValueText.alignment = TextAlignmentOptions.Center;
+        hmiStatusValueText.color = new Color(0.88f, 0.12f, 0.12f, 1f);
+
+        hmiAngleText = CreateText(
+            statusCard, "St1", "V\u1ECB tr\u00ED (\u0111\u1ED9): <pos=90%>0",
+            new Vector2(24f, -82f), new Vector2(324f, 30f), 20, true);
+        hmiRotText = CreateText(
+            statusCard, "St2", "\u0110\u00E3 quay: <pos=90%>0",
+            new Vector2(24f, -122f), new Vector2(324f, 30f), 20, true);
+        hmiSpeedText = CreateText(
+            statusCard, "St3", "T\u1ED1c \u0111\u1ED9 RPM: <pos=90%>0",
+            new Vector2(24f, -162f), new Vector2(324f, 30f), 20, true);
+
+        ResetHmiInputFields();
+        UpdateDirectionButtons();
+        canvasHmiRoot.SetActive(runtimeHmiVisible);
+        UpdateCanvasHmi();
+    }
+
+    private void CreateCanvasHmiInstitutional()
     {
         if (canvasHmiRoot != null)
             return;
@@ -1697,19 +2157,43 @@ public class PLCController_v2 : MonoBehaviour
         canvasHmiPanelRect = panel.GetComponent<RectTransform>();
         if (canvasHmiPanelRect == null)
             canvasHmiPanelRect = panel.AddComponent<RectTransform>();
-        canvasHmiPanelRect.anchorMin = new Vector2(0f, 1f);
-        canvasHmiPanelRect.anchorMax = new Vector2(0f, 1f);
-        canvasHmiPanelRect.pivot = new Vector2(0f, 1f);
-        if (!usesSceneHmi)
-            canvasHmiPanelRect.anchoredPosition = canvasHmiAnchoredPosition;
-        else
-            canvasHmiPanelRect.anchoredPosition = Vector2.zero;
-        Vector2 modernHmiSize = new Vector2(620f, 420f);
+        Vector2 modernHmiSize = new Vector2(620f, 480f);
         RectTransform rootRect = canvasHmiRoot.GetComponent<RectTransform>();
+        bool screenSpaceHmi = canvas.renderMode != RenderMode.WorldSpace;
         if (rootRect != null)
-            rootRect.sizeDelta = modernHmiSize;
+        {
+            if (screenSpaceHmi)
+            {
+                rootRect.anchorMin = Vector2.zero;
+                rootRect.anchorMax = Vector2.one;
+                rootRect.pivot = new Vector2(0.5f, 0.5f);
+                rootRect.offsetMin = Vector2.zero;
+                rootRect.offsetMax = Vector2.zero;
+                canvasHmiRoot.transform.localScale = Vector3.one;
+            }
+            else
+            {
+                rootRect.sizeDelta = modernHmiSize;
+            }
+        }
+        if (screenSpaceHmi)
+        {
+            canvasHmiPanelRect.anchorMin = new Vector2(1f, 1f);
+            canvasHmiPanelRect.anchorMax = new Vector2(1f, 1f);
+            canvasHmiPanelRect.pivot = new Vector2(1f, 1f);
+            canvasHmiPanelRect.anchoredPosition = new Vector2(-32f, -150f);
+        }
+        else
+        {
+            canvasHmiPanelRect.anchorMin = new Vector2(0f, 1f);
+            canvasHmiPanelRect.anchorMax = new Vector2(0f, 1f);
+            canvasHmiPanelRect.pivot = new Vector2(0f, 1f);
+            canvasHmiPanelRect.anchoredPosition = usesSceneHmi ? Vector2.zero : canvasHmiAnchoredPosition;
+        }
         canvasHmiPanelRect.sizeDelta = modernHmiSize;
-        if (!usesSceneHmi)
+        if (screenSpaceHmi)
+            panel.transform.localScale = Vector3.one * 0.85f;
+        else if (!usesSceneHmi)
             panel.transform.localScale = Vector3.one * canvasHmiScale;
         else
             panel.transform.localScale = Vector3.one;
@@ -1720,12 +2204,14 @@ public class PLCController_v2 : MonoBehaviour
         panelImage.color = screenBg;
         AddShadow(panel, new Color(0.02f, 0.16f, 0.16f, 0.18f), new Vector2(0f, -6f));
 
-        TextMeshProUGUI title = CreateText(panel.transform, "HmiTitle", "GIAO DIỆN ĐIỀU KHIỂN", new Vector2(0f, -8f), new Vector2(620f, 44f), 25, true);
+        CreateInstitutionHeader(panel.transform, modernHmiSize, redBtn);
+
+        TextMeshProUGUI title = CreateText(panel.transform, "HmiTitle", "GIAO DIỆN ĐIỀU KHIỂN", new Vector2(0f, -66f), new Vector2(620f, 32f), 22, true);
         title.alignment = TextAlignmentOptions.Center;
         title.color = titleColor;
 
-        Transform gp = MakeSubPanel(panel.transform, "SetupCard", new Vector2(14f, -64f), new Vector2(374f, 342f), card);
-        Transform rp = MakeSubPanel(panel.transform, "ControlCard", new Vector2(402f, -64f), new Vector2(204f, 342f), card);
+        Transform gp = MakeSubPanel(panel.transform, "SetupCard", new Vector2(14f, -104f), new Vector2(374f, 342f), card);
+        Transform rp = MakeSubPanel(panel.transform, "ControlCard", new Vector2(402f, -104f), new Vector2(204f, 342f), card);
         Transform statusPanel = MakeSubPanel(gp, "StatusPanel", new Vector2(14f, -244f), new Vector2(346f, 88f), statusBg);
 
         TextMeshProUGUI setupTitle = CreateText(gp, "SetupTitle", "Thiết lập", new Vector2(16f, -10f), new Vector2(140f, 26f), 19, true);
@@ -1903,10 +2389,159 @@ public class PLCController_v2 : MonoBehaviour
         rect.pivot = new Vector2(0f, 1f);
         rect.anchoredPosition = pos;
         rect.sizeDelta = size;
-        go.AddComponent<Image>().color = color;
+        Image image = go.AddComponent<Image>();
+        image.color = color;
+        ApplyRoundedImage(image);
         go.AddComponent<RectMask2D>();
         AddShadow(go, new Color(0.02f, 0.16f, 0.16f, 0.12f), new Vector2(0f, -4f));
         return go.transform;
+    }
+
+    private Transform MakeOutlinedSubPanel(
+        Transform parent,
+        string name,
+        Vector2 position,
+        Vector2 size,
+        Color fill,
+        Color border)
+    {
+        Transform panel = MakeSubPanel(parent, name, position, size, fill);
+        AddBorder(panel.gameObject, border, 1f);
+        return panel;
+    }
+
+    private Image CreateDecorativeImage(
+        Transform parent,
+        string name,
+        Vector2 position,
+        Vector2 size,
+        Color color)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        RectTransform rect = go.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+        Image image = go.AddComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+        return image;
+    }
+
+    private void CreateControllerDocumentIcon(Transform parent, Color color)
+    {
+        CreateDecorativeImage(parent, "DocumentLeft", new Vector2(15f, -10f), new Vector2(2f, 36f), color);
+        CreateDecorativeImage(parent, "DocumentTop", new Vector2(15f, -10f), new Vector2(24f, 2f), color);
+        CreateDecorativeImage(parent, "DocumentRight", new Vector2(37f, -10f), new Vector2(2f, 36f), color);
+        CreateDecorativeImage(parent, "DocumentBottom", new Vector2(15f, -44f), new Vector2(24f, 2f), color);
+        CreateDecorativeImage(parent, "DocumentLine1", new Vector2(21f, -20f), new Vector2(12f, 2f), color);
+        CreateDecorativeImage(parent, "DocumentLine2", new Vector2(21f, -27f), new Vector2(12f, 2f), color);
+        CreateDecorativeImage(parent, "DocumentLine3", new Vector2(21f, -34f), new Vector2(9f, 2f), color);
+    }
+
+    private void ApplyRoundedImage(Image image)
+    {
+        if (image == null)
+            return;
+
+        Sprite rounded = Resources.Load<Sprite>("UI/RoundedRect");
+        if (rounded == null)
+            return;
+
+        image.sprite = rounded;
+        image.type = Image.Type.Sliced;
+    }
+
+    private void AddBorder(GameObject target, Color color, float width)
+    {
+        if (target == null)
+            return;
+
+        Outline outline = target.GetComponent<Outline>();
+        if (outline == null)
+            outline = target.AddComponent<Outline>();
+        outline.effectColor = color;
+        outline.effectDistance = new Vector2(width, -width);
+        outline.useGraphicAlpha = true;
+    }
+
+    private void SetButtonTextColor(Button button, Color color)
+    {
+        if (button == null)
+            return;
+
+        TextMeshProUGUI label = button.GetComponentInChildren<TextMeshProUGUI>(true);
+        if (label != null)
+            label.color = color;
+    }
+
+    private void StretchText(
+        TextMeshProUGUI text,
+        TextAlignmentOptions alignment,
+        Color color)
+    {
+        if (text == null)
+            return;
+
+        RectTransform rect = text.rectTransform;
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
+        text.alignment = alignment;
+        text.color = color;
+    }
+
+    private void CreateInstitutionHeader(Transform parent, Vector2 panelSize, Color brandRed)
+    {
+        GameObject logoBox = new GameObject("InstitutionLogo");
+        logoBox.transform.SetParent(parent, false);
+        RectTransform logoRect = logoBox.AddComponent<RectTransform>();
+        logoRect.anchorMin = new Vector2(0f, 1f);
+        logoRect.anchorMax = new Vector2(0f, 1f);
+        logoRect.pivot = new Vector2(0f, 1f);
+        logoRect.anchoredPosition = new Vector2(14f, -7f);
+        logoRect.sizeDelta = new Vector2(58f, 58f);
+        Image logoImage = logoBox.AddComponent<Image>();
+        logoImage.color = Color.white;
+        logoImage.raycastTarget = false;
+        logoImage.preserveAspect = true;
+        if (institutionLogo != null)
+            logoImage.sprite = institutionLogo;
+        AddShadow(logoBox, new Color(0f, 0f, 0f, 0.16f), new Vector2(0f, -3f));
+
+        if (institutionLogo == null)
+        {
+            TextMeshProUGUI fallbackLogo = CreateText(logoBox.transform, "FallbackLogoText", "PTIT", Vector2.zero, new Vector2(58f, 58f), 19, true);
+            RectTransform fallbackRect = fallbackLogo.rectTransform;
+            fallbackRect.anchorMin = Vector2.zero;
+            fallbackRect.anchorMax = Vector2.one;
+            fallbackRect.offsetMin = Vector2.zero;
+            fallbackRect.offsetMax = Vector2.zero;
+            fallbackLogo.alignment = TextAlignmentOptions.Center;
+            fallbackLogo.color = brandRed;
+        }
+
+        GameObject banner = new GameObject("InstitutionNameBanner");
+        banner.transform.SetParent(parent, false);
+        RectTransform bannerRect = banner.AddComponent<RectTransform>();
+        bannerRect.anchorMin = new Vector2(0f, 1f);
+        bannerRect.anchorMax = new Vector2(0f, 1f);
+        bannerRect.pivot = new Vector2(0f, 1f);
+        bannerRect.anchoredPosition = new Vector2(70f, -14f);
+        bannerRect.sizeDelta = new Vector2(panelSize.x - 84f, 44f);
+        Image bannerImage = banner.AddComponent<Image>();
+        bannerImage.color = brandRed;
+        bannerImage.raycastTarget = false;
+        AddShadow(banner, new Color(0f, 0f, 0f, 0.18f), new Vector2(0f, -4f));
+
+        TextMeshProUGUI nameText = CreateText(banner.transform, "InstitutionNameText", institutionName, new Vector2(18f, 0f), new Vector2(panelSize.x - 124f, 44f), 22, true);
+        nameText.alignment = TextAlignmentOptions.Center;
+        nameText.color = Color.white;
     }
 
     private TMP_InputField CreateInputField(Transform parent, string name, string initial, Vector2 pos, Vector2 size, int fontSize)
@@ -1919,7 +2554,9 @@ public class PLCController_v2 : MonoBehaviour
         rect.pivot = new Vector2(0f, 1f);
         rect.anchoredPosition = pos;
         rect.sizeDelta = size;
-        go.AddComponent<Image>().color = Color.white;
+        Image inputBackground = go.AddComponent<Image>();
+        inputBackground.color = new Color(0.91f, 0.94f, 0.99f, 1f);
+        ApplyRoundedImage(inputBackground);
         AddShadow(go, new Color(0.02f, 0.16f, 0.16f, 0.10f), new Vector2(0f, -2f));
 
         GameObject textGo = new GameObject("Text");
@@ -1978,6 +2615,7 @@ public class PLCController_v2 : MonoBehaviour
 
         Image image = go.AddComponent<Image>();
         image.color = color;
+        ApplyRoundedImage(image);
         AddShadow(go, new Color(0f, 0f, 0f, 0.18f), new Vector2(0f, -4f));
 
         Button button = go.AddComponent<Button>();
@@ -2002,6 +2640,53 @@ public class PLCController_v2 : MonoBehaviour
     }
 
     private void UpdateCanvasHmi()
+    {
+        if (canvasHmiRoot == null)
+            return;
+
+        const string feedbackValueColor = "#14963A";
+        if (hmiAngleText != null)
+            hmiAngleText.text = $"V\u1ECB tr\u00ED (\u0111\u1ED9): <pos=88%><color={feedbackValueColor}>{LatestTelemetry.angle:F0}</color>";
+        if (hmiRotText != null)
+            hmiRotText.text = $"\u0110\u00E3 quay: <pos=88%><color={feedbackValueColor}>{LatestTelemetry.rotations:F0}</color>";
+        if (hmiSpeedSetText != null)
+            hmiSpeedSetText.text = hmiTargetSpeed.ToString("F0");
+        if (hmiSpeedText != null)
+            hmiSpeedText.text = $"T\u1ED1c \u0111\u1ED9 RPM: <pos=88%><color={feedbackValueColor}>{GetDisplayRpm():F0}</color>";
+
+        string stateText;
+        Color stateColor;
+        if (!IsPiOnline)
+        {
+            stateText = "M\u1EA5t k\u1EBFt n\u1ED1i";
+            stateColor = new Color(0.9f, 0.2f, 0.16f, 1f);
+        }
+        else if (LatestTelemetry.running)
+        {
+            stateText = "\u0110ang ch\u1EA1y";
+            stateColor = new Color(0.05f, 0.38f, 0.9f, 1f);
+        }
+        else
+        {
+            stateText = "\u0110\u00E3 k\u1EBFt n\u1ED1i";
+            stateColor = new Color(0.08f, 0.62f, 0.2f, 1f);
+        }
+
+        if (hmiStatusValueText != null)
+        {
+            hmiStatusValueText.text = stateText;
+            hmiStatusValueText.color = stateColor;
+            if (hmiStatusText != null)
+                hmiStatusText.color = new Color(0.07f, 0.075f, 0.085f, 1f);
+        }
+        else if (hmiStatusText != null)
+        {
+            hmiStatusText.text = $"Tr\u1EA1ng th\u00E1i: {stateText}";
+            hmiStatusText.color = stateColor;
+        }
+    }
+
+    private void UpdateCanvasHmiInstitutional()
     {
         if (canvasHmiRoot == null)
             return;

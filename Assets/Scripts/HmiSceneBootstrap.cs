@@ -19,8 +19,6 @@ public class HmiSceneBootstrap : MonoBehaviour
 
             GameObject plcObject = new GameObject("PLC_Manager_HMI");
             plcController = plcObject.AddComponent<PLCController_v2>();
-            plcController.piBaseUrl = PLCController_v2.DefaultPiBaseUrl;
-            plcController.url = PLCController_v2.DefaultControlUrl;
             plcController.enableControlCameraLayout = false;
             plcController.showWireLabels = false;
             plcController.canvasHmiScale = 1f;

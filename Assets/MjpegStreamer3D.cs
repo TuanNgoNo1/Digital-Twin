@@ -28,8 +28,6 @@ public class MjpegStreamer3D : MonoBehaviour
             streamUrl = DefaultStreamUrl;
         }
 
-        updateInterval = Mathf.Max(0.2f, updateInterval);
-
         // Tự động lấy Renderer của vật thể (Plane/Quad/Cube)
         screenRenderer = GetComponent<Renderer>();
 
