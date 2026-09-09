@@ -1,0 +1,49 @@
+name: plc-guacamole
+
+services:
+  guacd:
+    image: guacamole/guacd:1.6.0
+    restart: unless-stopped
+    networks:
+      - guacnet
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - guac-postgres-data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - guacnet
+
+  guacamole:
+    image: guacamole/guacamole:1.6.0
+    restart: unless-stopped
+    depends_on:
+      - guacd
+      - postgres
+    environment:
+      GUACD_HOSTNAME: guacd
+      POSTGRESQL_HOSTNAME: postgres
+      POSTGRESQL_PORT: 5432
+      POSTGRESQL_DATABASE: ${POSTGRES_DB}
+      POSTGRESQL_USER: ${POSTGRES_USER}
+      POSTGRESQL_PASSWORD: ${POSTGRES_PASSWORD}
+      WEBAPP_CONTEXT: gxworks2
+      REMOTE_IP_VALVE_ENABLED: "true"
+      PROXY_ALLOWED_IPS_REGEX: "127\\.0\\.0\\.1|10\\..*|100\\.118\\.190\\.85|172\\..*|192\\.168\\..*"
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - guacnet
+
+networks:
+  guacnet:
+
+volumes:
+  guac-postgres-data:
+

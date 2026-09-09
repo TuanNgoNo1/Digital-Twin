@@ -1,0 +1,21 @@
+newmtl Red_Insulation
+Kd 0.8 0.012 0.025
+Ka 0.05 0.05 0.05
+Ks 0.45 0.45 0.45
+Ns 90
+illum 2
+
+newmtl Polished_Brass
+Kd 0.78 0.49 0.12
+Ka 0.05 0.05 0.05
+Ks 0.45 0.45 0.45
+Ns 90
+illum 2
+
+newmtl Dark_Recess
+Kd 0.025 0.025 0.03
+Ka 0.05 0.05 0.05
+Ks 0.45 0.45 0.45
+Ns 90
+illum 2
+

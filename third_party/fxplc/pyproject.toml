@@ -1,0 +1,22 @@
+[project]
+name = "fxplc"
+version = "0.4.0"
+description = "Python connector for low-level Mitsubishi MELSEC FX series (FX-232AW) serial protocol with builtin HTTP server"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+requires-python = ">=3.8"
+keywords = ["cli", "client", "fx", "melsec", "mitsubishi", "serial"]
+authors = [
+    { name = "Krystian Dużyński" },
+]
+
+dynamic = ["dependencies"]
+
+[project.urls]
+repository = "https://github.com/KrystianD/fxplc"
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[project.scripts]
+fxplc = "fxplc.cli.main:main_cli"

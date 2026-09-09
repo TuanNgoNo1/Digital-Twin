@@ -1,0 +1,8 @@
+	handle /gxworks2 {
+		redir * /gxworks2/ 308
+	}
+
+	handle /gxworks2/* {
+		reverse_proxy 127.0.0.1:8081
+	}
+

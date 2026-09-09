@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="initial-scale=1, minimum-scale=1, maximum-scale=1" />
+    <meta charset="utf-8">
+    <title>Cyberlands</title>
+
+    <style>
+      html, body, div, iframe {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        border: none;
+      }
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+    </style>
+
+    <!-- Load the SCORM wrapper -->
+    <script src="SCORMWrapper.js"></script>
+  </head>
+
+  <body>
+    <!-- Unity game hosted on another domain -->
+    <iframe id="gameFrame" src="./index.html"></iframe>
+
+    <script>
+      // Listen for messages from the Unity iframe
+      window.addEventListener("message", (event) => {
+        if (event.data && event.data.type === "unityReady") {
+          console.log("Unity iframe is ready, register instance if needed");
+
+          // You can store the iframe reference if needed:
+          var gameFrame = document.getElementById("gameFrame");
+
+          // Now you can send messages to the iframe using:
+          // gameFrame.contentWindow.postMessage({...}, "*");
+        }
+      });
+
+      // Existing code
+      if (typeof unityInstance !== "undefined") {
+        SCORM.setUnityInstance(unityInstance);
+      } else {
+        console.log("Unity instance not found at page load. Ensure it's assigned once Unity initializes.");
+      }
+    </script>
+  </body>
+</html>
